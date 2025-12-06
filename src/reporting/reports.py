@@ -4,11 +4,9 @@ Reporting Module.
 Generate reports and visualizations from backtest results.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
-import os
 
 from ..core.models import BacktestResult
 
@@ -54,17 +52,21 @@ class ReportGenerator:
 """
 
         if benchmark:
-            alpha_5050 = result.total_return - benchmark.get('50_50', 0)
-            report += f"""## 📊 Benchmark Comparison
-
-| Benchmark | Return | Alpha |
-|-----------|--------|-------|
-| Strategy | **{result.total_return:+.2%}** | - |
-| Asset A (BTC) | {benchmark.get('asset_a', 0):+.2%} | {result.total_return - benchmark.get('asset_a', 0):+.2%} |
-| Asset B (ETH) | {benchmark.get('asset_b', 0):+.2%} | {result.total_return - benchmark.get('asset_b', 0):+.2%} |
-| 50/50 B&H | {benchmark.get('50_50', 0):+.2%} | **{alpha_5050:+.2%}** |
-
-"""
+            asset_a = benchmark.get('asset_a', 0)
+            asset_b = benchmark.get('asset_b', 0)
+            asset_5050 = benchmark.get('50_50', 0)
+            alpha_5050 = result.total_return - asset_5050
+            alpha_a = result.total_return - asset_a
+            alpha_b = result.total_return - asset_b
+            report += (
+                "## 📊 Benchmark Comparison\n\n"
+                "| Benchmark | Return | Alpha |\n"
+                "|-----------|--------|-------|\n"
+                f"| Strategy | **{result.total_return:+.2%}** | - |\n"
+                f"| Asset A (BTC) | {asset_a:+.2%} | {alpha_a:+.2%} |\n"
+                f"| Asset B (ETH) | {asset_b:+.2%} | {alpha_b:+.2%} |\n"
+                f"| 50/50 B&H | {asset_5050:+.2%} | **{alpha_5050:+.2%}** |\n\n"
+            )
 
         report += """## 📝 Notes
 

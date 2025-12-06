@@ -9,9 +9,10 @@ on:
   push:
     branches: [main, develop]
     tags: ['v*', 'release-*']
+  schedule:
+    - cron: '0 4 * * 0'  # Weekly on Sundays at 04:00 UTC
   pull_request:
     branches: [main]
-  # Manual trigger
   workflow_dispatch:
     inputs:
       run_extended_backtest:
@@ -61,6 +62,26 @@ jobs:
         with:
           file: ./coverage.xml
           fail_ci_if_error: false
+
+      - name: 🔢 Check coverage threshold
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          import sys
+          try:
+              tree = ET.parse('coverage.xml')
+              root = tree.getroot()
+              rate = float(root.get('line-rate', '0'))
+              print(f'Coverage line-rate: {rate:.3f}')
+              threshold = 0.60
+              if rate < threshold:
+                  print(f'❌ Coverage below threshold of {threshold*100:.0f}%: {rate*100:.2f}%')
+                  sys.exit(1)
+              else:
+                  print(f'✅ Coverage OK: {rate*100:.2f}% >= {threshold*100:.0f}%')
+          except FileNotFoundError:
+              print('⚠️ coverage.xml not found, skipping coverage threshold check')
+          PY
 
   # ----------------------------------------
   # 📈 Backtest Validation
@@ -149,6 +170,39 @@ jobs:
           retention-days: 30
 
   # ----------------------------------------
+  # 🔁 Scheduled Backtest (Nightly)
+  # ----------------------------------------
+  scheduled-backtest:
+    name: Nightly Backtest
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirement.txt
+
+      - name: 🏃 Run quick backtest
+        run: |
+          mkdir -p outputs
+          python tradebot.py backtest --data data/crypto_btc_eth_1h_30d.csv --strategy safe_profit --output outputs/nightly_backtest
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-backtest-results
+          path: outputs/nightly_backtest/
+          retention-days: 14
+
+  # ----------------------------------------
   # 🐳 Docker Build
   # ----------------------------------------
   docker:
@@ -179,6 +233,7 @@ jobs:
 
   # ----------------------------------------
   # 📡 Integration / smoke tests using the built image
+  # ----------------------------------------
   integration:
     name: Integration Smoke Tests
     runs-on: ubuntu-latest

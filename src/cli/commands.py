@@ -5,14 +5,18 @@ Each handler implements logic for one CLI subcommand.
 Handlers are thin wrappers that delegate to business logic modules.
 """
 
-import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, List
 
 from ..strategies import StrategyFactory
-from ..data import CSVDataSource, BinanceRESTSource, DataSourceFactory
-from ..engine import BacktestConfig, BacktestEngine, StrategyComparator, PaperTradingEngine, DashboardDisplay
+from ..data import BinanceRESTSource, DataSourceFactory
+from ..engine import (
+    BacktestConfig,
+    BacktestEngine,
+    StrategyComparator,
+    PaperTradingEngine,
+    DashboardDisplay,
+)
 from ..reporting import ReportGenerator, ChartGenerator
 
 
@@ -22,7 +26,7 @@ from ..reporting import ReportGenerator, ChartGenerator
 
 def handle_backtest(args: Namespace) -> int:
     """Handle 'backtest' command."""
-    print(f"📊 Running backtest...")
+    print("📊 Running backtest...")
     print(f"   Data: {args.data}")
     print(f"   Strategy: {args.strategy}")
     print(f"   Capital: ${args.capital:,.2f}")
@@ -86,7 +90,12 @@ def handle_backtest(args: Namespace) -> int:
             prices_a = [p.asset_a for p in prices]
             prices_b = [p.asset_b for p in prices]
 
-            charts.plot_performance(result, prices_a, prices_b, output_dir / "performance.png")
+            charts.plot_performance(
+                result,
+                prices_a,
+                prices_b,
+                output_dir / "performance.png",
+            )
             charts.plot_allocations(result, output_dir / "allocations.png")
             charts.plot_drawdown(result, output_dir / "drawdown.png")
             print(f"📊 Charts saved to: {output_dir}")
@@ -102,7 +111,7 @@ def handle_backtest(args: Namespace) -> int:
 
 def handle_paper(args: Namespace) -> int:
     """Handle 'paper' command."""
-    print(f"🚀 Starting paper trading...")
+    print("🚀 Starting paper trading...")
     print(f"   Strategy: {args.strategy}")
     print(f"   Capital: ${args.capital:,.2f}")
     print(f"   Symbols: {args.symbols[0]}, {args.symbols[1]}")
@@ -151,7 +160,15 @@ def handle_paper(args: Namespace) -> int:
             import csv
             with open(args.output, 'w', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(['timestamp', 'symbol', 'side', 'quantity', 'price', 'fee'])
+                header = [
+                    "timestamp",
+                    "symbol",
+                    "side",
+                    "quantity",
+                    "price",
+                    "fee",
+                ]
+                writer.writerow(header)
                 for trade in state.trades:
                     writer.writerow([
                         trade.timestamp.isoformat(),
@@ -175,7 +192,7 @@ def handle_paper(args: Namespace) -> int:
 
 def handle_fetch(args: Namespace) -> int:
     """Handle 'fetch' command."""
-    print(f"📥 Fetching data from Binance...")
+    print("📥 Fetching data from Binance...")
     print(f"   Symbols: {args.symbols[0]}, {args.symbols[1]}")
     print(f"   Interval: {args.interval}")
     print(f"   Days: {args.days}")
@@ -210,7 +227,7 @@ def handle_fetch(args: Namespace) -> int:
 
 def handle_compare(args: Namespace) -> int:
     """Handle 'compare' command."""
-    print(f"📊 Comparing strategies...")
+    print("📊 Comparing strategies...")
     print(f"   Data: {args.data}")
     print()
 
@@ -235,24 +252,44 @@ def handle_compare(args: Namespace) -> int:
     print("=" * 80)
     print("📈 STRATEGY COMPARISON")
     print("=" * 80)
-    print(f"{'Strategy':<25} {'Return':>12} {'Sharpe':>10} {'Max DD':>10} {'Alpha':>12}")
+    header = "{:<25} {:>12} {:>10} {:>10} {:>12}".format(
+        "Strategy", "Return", "Sharpe", "Max DD", "Alpha"
+    )
+    print(header)
     print("-" * 80)
 
     ranked = comparator.rank_by_return(results)
     for name, result in ranked:
         alpha = result.total_return - benchmark['50_50']
-        print(f"{name:<25} {result.total_return:>+11.2%} {result.sharpe_ratio:>10.2f} {result.max_drawdown:>10.2%} {alpha:>+11.2%}")
+        print(
+            "{:<25} {:>+11.2%} {:>10.2f} {:>10.2%} {:>+11.2%}".format(
+                name,
+                result.total_return,
+                result.sharpe_ratio,
+                result.max_drawdown,
+                alpha,
+            )
+        )
 
     print("-" * 80)
-    print(f"{'50/50 Buy&Hold':<25} {benchmark['50_50']:>+11.2%} {'N/A':>10} {'N/A':>10} {'baseline':>12}")
-    print(f"{'Asset A (BTC)':<25} {benchmark['asset_a']:>+11.2%}")
-    print(f"{'Asset B (ETH)':<25} {benchmark['asset_b']:>+11.2%}")
+    print(
+        "{:<25} {:>+11.2%} {:>10} {:>10} {:>12}".format(
+            "50/50 Buy&Hold",
+            benchmark["50_50"],
+            "N/A",
+            "N/A",
+            "baseline",
+        )
+    )
+    print("{:<25} {:>+11.2%}".format("Asset A (BTC)", benchmark["asset_a"]))
+    print("{:<25} {:>+11.2%}".format("Asset B (ETH)", benchmark["asset_b"]))
     print("=" * 80)
 
     # Winner
     if ranked:
         winner = ranked[0]
-        print(f"\n🏆 Best Strategy: {winner[0]} with {winner[1].total_return:+.2%} return")
+        winner_str = f"{winner[1].total_return:+.2%}"
+        print("\n🏆 Best Strategy: {} with {} return".format(winner[0], winner_str))
 
     # Generate chart if output specified
     if args.output:
@@ -295,7 +332,7 @@ def handle_compare(args: Namespace) -> int:
 
 def handle_report(args: Namespace) -> int:
     """Handle 'report' command."""
-    print(f"📝 Generating report...")
+    print("📝 Generating report...")
     print(f"   Data: {args.data}")
     print(f"   Strategy: {args.strategy}")
     print(f"   Output: {args.output}")
@@ -320,7 +357,7 @@ def handle_report(args: Namespace) -> int:
     # Markdown report
     reporter = ReportGenerator()
     reporter.save(result, output_dir / "report.md", benchmark)
-    print(f"   ✅ report.md")
+    print("   ✅ report.md")
 
     # Charts
     try:
@@ -328,14 +365,16 @@ def handle_report(args: Namespace) -> int:
         prices_a = [p.asset_a for p in prices]
         prices_b = [p.asset_b for p in prices]
 
-        charts.plot_performance(result, prices_a, prices_b, output_dir / "performance.png")
-        print(f"   ✅ performance.png")
+        charts.plot_performance(
+            result, prices_a, prices_b, output_dir / "performance.png"
+        )
+        print("   ✅ performance.png")
 
         charts.plot_allocations(result, output_dir / "allocations.png")
-        print(f"   ✅ allocations.png")
+        print("   ✅ allocations.png")
 
         charts.plot_drawdown(result, output_dir / "drawdown.png")
-        print(f"   ✅ drawdown.png")
+        print("   ✅ drawdown.png")
     except ImportError:
         print("   ⚠️  matplotlib not installed, skipping charts")
 

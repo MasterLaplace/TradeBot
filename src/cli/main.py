@@ -119,7 +119,7 @@ Examples:
         '-s', '--strategy',
         default='safe_profit',
         metavar='NAME',
-        help='Strategy to test (default: safe_profit). Available: safe_profit, adaptive_trend, baseline, sma, composite'
+        help='Strategy to test (default: safe_profit). Use `tradebot list`.'
     )
 
     backtest_parser.add_argument(
@@ -385,7 +385,7 @@ Examples:
     # LIST STRATEGIES COMMAND
     # --------------------------------------------------------------------------
 
-    list_parser = subparsers.add_parser(
+    subparsers.add_parser(
         'list',
         help='List available strategies',
         description='Display all available trading strategies with descriptions.'

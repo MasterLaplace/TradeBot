@@ -11,8 +11,7 @@ Design Principles:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import statistics
 
 from ..core.models import Allocation, Price
@@ -393,8 +392,12 @@ class VolScaleStrategy(BaseStrategy):
             return self.base_weight
 
         # Reference volatility (median of historical)
-        all_returns = [(prices[i] / prices[i-1] - 1.0) for i in range(1, len(prices))]
-        ref_vol = statistics.median([abs(r) for r in all_returns]) if all_returns else vol
+        all_returns = [
+            (prices[i] / prices[i - 1] - 1.0) for i in range(1, len(prices))
+        ]
+        ref_vol = (
+            statistics.median([abs(r) for r in all_returns]) if all_returns else vol
+        )
 
         # Scale inversely with volatility
         scale = ref_vol / vol if vol > 0 else 1.0
@@ -429,8 +432,12 @@ class BlendedStrategy(BaseStrategy):
         self.short_window = self.params.get("short", self.DEFAULT_PARAMS["short"])
         self.long_window = self.params.get("long", self.DEFAULT_PARAMS["long"])
         self.threshold = self.params.get("threshold", self.DEFAULT_PARAMS["threshold"])
-        self.vol_window = self.params.get("vol_window", self.DEFAULT_PARAMS["vol_window"])
-        self.vol_multiplier = self.params.get("vol_multiplier", self.DEFAULT_PARAMS["vol_multiplier"])
+        self.vol_window = self.params.get(
+            "vol_window", self.DEFAULT_PARAMS["vol_window"]
+        )
+        self.vol_multiplier = self.params.get(
+            "vol_multiplier", self.DEFAULT_PARAMS["vol_multiplier"]
+        )
 
     @property
     def name(self) -> str:
@@ -461,12 +468,19 @@ class BlendedStrategy(BaseStrategy):
         # Volatility scaling
         if len(prices) >= self.vol_window + 1:
             vol = TechnicalIndicators.volatility(prices, self.vol_window)
-            all_returns = [(prices[i] / prices[i-1] - 1.0) for i in range(1, len(prices))]
-            ref_vol = statistics.median([abs(r) for r in all_returns]) if all_returns else vol
+            all_returns = [
+                (prices[i] / prices[i - 1] - 1.0) for i in range(1, len(prices))
+            ]
+            ref_vol = (
+                statistics.median([abs(r) for r in all_returns])
+                if all_returns
+                else vol
+            )
 
             if vol > 0:
                 scale = ref_vol / vol
-                target = max(0.0, min(1.0, target * (1 + (scale - 1) * self.vol_multiplier)))
+                scaled_target = target * (1 + (scale - 1) * self.vol_multiplier)
+                target = max(0.0, min(1.0, scaled_target))
 
         # Blend
         weight = self.blend * baseline_w + (1.0 - self.blend) * target
@@ -739,11 +753,46 @@ class EnsembleStrategy(BaseStrategy):
 
     # Top 5 candidates from Optuna robust optimization
     ENSEMBLE_CANDIDATES = [
-        {"blend": 0.9996436412271156, "short": 10, "long": 27, "threshold": 0.0452921667498627, "vol_window": 13, "vol_multiplier": 0.7322341609310995},
-        {"blend": 0.9995821862855174, "short": 9, "long": 23, "threshold": 0.0431405472291731, "vol_window": 14, "vol_multiplier": 0.7285051684602486},
-        {"blend": 0.99956027510904, "short": 9, "long": 51, "threshold": 0.0439471735236884, "vol_window": 10, "vol_multiplier": 0.6304819173928731},
-        {"blend": 0.9994743275641822, "short": 10, "long": 23, "threshold": 0.0440539482092565, "vol_window": 18, "vol_multiplier": 0.7221503215581743},
-        {"blend": 0.9994293508702308, "short": 8, "long": 29, "threshold": 0.0491851548056736, "vol_window": 12, "vol_multiplier": 0.6668045796733401},
+        {
+            "blend": 0.9996436412271156,
+            "short": 10,
+            "long": 27,
+            "threshold": 0.0452921667498627,
+            "vol_window": 13,
+            "vol_multiplier": 0.7322341609310995,
+        },
+        {
+            "blend": 0.9995821862855174,
+            "short": 9,
+            "long": 23,
+            "threshold": 0.0431405472291731,
+            "vol_window": 14,
+            "vol_multiplier": 0.7285051684602486,
+        },
+        {
+            "blend": 0.99956027510904,
+            "short": 9,
+            "long": 51,
+            "threshold": 0.0439471735236884,
+            "vol_window": 10,
+            "vol_multiplier": 0.6304819173928731,
+        },
+        {
+            "blend": 0.9994743275641822,
+            "short": 10,
+            "long": 23,
+            "threshold": 0.0440539482092565,
+            "vol_window": 18,
+            "vol_multiplier": 0.7221503215581743,
+        },
+        {
+            "blend": 0.9994293508702308,
+            "short": 8,
+            "long": 29,
+            "threshold": 0.0491851548056736,
+            "vol_window": 12,
+            "vol_multiplier": 0.6668045796733401,
+        },
     ]
 
     def __init__(self, params: Optional[Dict[str, Any]] = None):

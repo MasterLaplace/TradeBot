@@ -9,10 +9,9 @@ This module defines the core abstractions following SOLID principles:
 - Dependency Inversion: Depend on abstractions
 """
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Optional, Protocol, Tuple
+from typing import Dict, List, Optional, Protocol
 from datetime import datetime
 
 
@@ -75,13 +74,18 @@ class Portfolio:
             self.asset_b_qty * price.asset_b
         )
 
-    def rebalance(self, allocation: Allocation, price: Price, fee_rate: float = 0.001) -> float:
+    def rebalance(
+        self,
+        allocation: Allocation,
+        price: Price,
+        fee_rate: float = 0.001,
+    ) -> float:
         """Rebalance portfolio to target allocation. Returns fees paid."""
         current_value = self.value(price)
 
         target_a_value = current_value * allocation.asset_a
         target_b_value = current_value * allocation.asset_b
-        target_cash = current_value * allocation.cash
+        # target_cash = current_value * allocation.cash  # not used directly
 
         # Calculate trades needed
         current_a_value = self.asset_a_qty * price.asset_a
@@ -95,8 +99,12 @@ class Portfolio:
         # Apply new allocation (after fees)
         net_value = current_value - fees
         self.cash = net_value * allocation.cash
-        self.asset_a_qty = (net_value * allocation.asset_a) / price.asset_a if price.asset_a > 0 else 0
-        self.asset_b_qty = (net_value * allocation.asset_b) / price.asset_b if price.asset_b > 0 else 0
+        self.asset_a_qty = (
+            (net_value * allocation.asset_a) / price.asset_a if price.asset_a > 0 else 0
+        )
+        self.asset_b_qty = (
+            (net_value * allocation.asset_b) / price.asset_b if price.asset_b > 0 else 0
+        )
 
         return fees
 

@@ -9,7 +9,7 @@ Components:
 - ResultAnalyzer: Analysis and comparison
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 import statistics
 import math
@@ -83,7 +83,11 @@ class MetricsCalculator:
         if not downside_returns:
             return float('inf') if mean_return > 0 else 0.0
 
-        downside_std = statistics.stdev(downside_returns) if len(downside_returns) > 1 else abs(downside_returns[0])
+        downside_std = (
+            statistics.stdev(downside_returns)
+            if len(downside_returns) > 1
+            else abs(downside_returns[0])
+        )
 
         if downside_std == 0:
             return 0.0
@@ -209,14 +213,20 @@ class BacktestEngine:
                 total_fees += fees
 
         # Calculate final metrics
-        final_value = portfolio_values[-1] if portfolio_values else self.config.initial_capital
+        final_value = (
+            portfolio_values[-1]
+            if portfolio_values
+            else self.config.initial_capital
+        )
         returns = self._metrics.calculate_returns(portfolio_values)
 
         return BacktestResult(
             strategy_name=strategy.name,
             initial_capital=self.config.initial_capital,
             final_value=final_value,
-            total_return=self._metrics.total_return(self.config.initial_capital, final_value),
+            total_return=self._metrics.total_return(
+                self.config.initial_capital, final_value
+            ),
             sharpe_ratio=self._metrics.sharpe_ratio(returns),
             max_drawdown=self._metrics.max_drawdown(portfolio_values),
             win_rate=self._metrics.win_rate(returns),
@@ -260,7 +270,10 @@ class StrategyComparator:
 
         return results
 
-    def rank_by_return(self, results: Dict[str, BacktestResult]) -> List[Tuple[str, BacktestResult]]:
+    def rank_by_return(
+        self,
+        results: Dict[str, BacktestResult],
+    ) -> List[Tuple[str, BacktestResult]]:
         """Rank strategies by total return."""
         return sorted(
             results.items(),
@@ -281,8 +294,12 @@ class StrategyComparator:
 
         first, last = prices[0], prices[-1]
 
-        ret_a = (last.asset_a - first.asset_a) / first.asset_a if first.asset_a > 0 else 0
-        ret_b = (last.asset_b - first.asset_b) / first.asset_b if first.asset_b > 0 else 0
+        ret_a = (
+            (last.asset_a - first.asset_a) / first.asset_a if first.asset_a > 0 else 0
+        )
+        ret_b = (
+            (last.asset_b - first.asset_b) / first.asset_b if first.asset_b > 0 else 0
+        )
 
         return {
             'asset_a': ret_a,

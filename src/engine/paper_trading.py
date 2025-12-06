@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
 import time
-import sys
 
 from ..core.models import Allocation, Portfolio, Price
 from ..strategies.base import BaseStrategy
@@ -26,7 +25,10 @@ class Trade:
     fee: float
 
     def __str__(self) -> str:
-        return f"{self.side} {self.symbol}: {self.quantity:.6f} @ ${self.price:,.2f} (fee: ${self.fee:.2f})"
+        return (
+            f"{self.side} {self.symbol}: {self.quantity:.6f} @ "
+            f"${self.price:,.2f} (fee: ${self.fee:.2f})"
+        )
 
 
 @dataclass
@@ -94,8 +96,16 @@ class PaperTradingEngine:
         current_value = portfolio.value(price)
 
         # Calculate target quantities
-        target_a_qty = (current_value * allocation.asset_a) / price.asset_a if price.asset_a > 0 else 0
-        target_b_qty = (current_value * allocation.asset_b) / price.asset_b if price.asset_b > 0 else 0
+        target_a_qty = (
+            (current_value * allocation.asset_a) / price.asset_a
+            if price.asset_a > 0
+            else 0
+        )
+        target_b_qty = (
+            (current_value * allocation.asset_b) / price.asset_b
+            if price.asset_b > 0
+            else 0
+        )
 
         # Asset A trades
         delta_a = target_a_qty - portfolio.asset_a_qty
@@ -128,7 +138,7 @@ class PaperTradingEngine:
             ))
 
         # Apply rebalance
-        total_fees = portfolio.rebalance(allocation, price, self.fee_rate)
+        portfolio.rebalance(allocation, price, self.fee_rate)
 
         return trades
 

@@ -11,7 +11,6 @@ Data Sources:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterator, List, Optional
@@ -84,9 +83,17 @@ class CSVDataSource(BaseDataSource):
 
             # Validate columns
             if self.asset_a_col not in self._data.columns:
-                raise ValueError(f"Column '{self.asset_a_col}' not found in {self.file_path}")
+                raise ValueError(
+                    "Column '{col}' not found in {file}".format(
+                        col=self.asset_a_col, file=self.file_path
+                    )
+                )
             if self.asset_b_col not in self._data.columns:
-                raise ValueError(f"Column '{self.asset_b_col}' not found in {self.file_path}")
+                raise ValueError(
+                    "Column '{col}' not found in {file}".format(
+                        col=self.asset_b_col, file=self.file_path
+                    )
+                )
 
             # Convert to Price objects
             self._prices = [
@@ -156,7 +163,8 @@ class BinanceRESTSource(BaseDataSource):
     def _fetch_klines(self, symbol: str) -> List[dict]:
         """Fetch candlestick data from Binance."""
         end_time = int(datetime.now().timestamp() * 1000)
-        start_time = int((datetime.now() - timedelta(days=self.days)).timestamp() * 1000)
+        now = datetime.now()
+        start_time = int((now - timedelta(days=self.days)).timestamp() * 1000)
 
         all_klines = []
         current_start = start_time
@@ -183,13 +191,16 @@ class BinanceRESTSource(BaseDataSource):
                     break
 
                 all_klines.extend(klines)
-                current_start = klines[-1][0] + self.INTERVALS.get(self.interval, 3600000)
+                current_start = (
+                    klines[-1][0]
+                    + self.INTERVALS.get(self.interval, 3600000)
+                )
 
                 # Rate limiting
                 time.sleep(0.1)
 
             except requests.RequestException as e:
-                raise ConnectionError(f"Failed to fetch from Binance: {e}")
+                raise ConnectionError("Failed to fetch from Binance") from e
 
         return all_klines
 
@@ -259,7 +270,7 @@ class BinanceRESTSource(BaseDataSource):
                 timestamp=datetime.now()
             )
         except requests.RequestException as e:
-            raise ConnectionError(f"Failed to get current price: {e}")
+            raise ConnectionError("Failed to get current price") from e
 
     def save_to_csv(self, output_path: str) -> None:
         """Save fetched data to CSV for offline use."""

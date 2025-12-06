@@ -1,5 +1,3 @@
-import pytest
-
 from src.strategies import StrategyFactory
 
 
