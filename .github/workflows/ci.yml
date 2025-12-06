@@ -150,6 +150,7 @@ jobs:
         run: |
           python - <<'PY'
           import sys
+          import os
           sys.path.insert(0, '.')
           from src.data.sources import DataSourceFactory
           from src.strategies import StrategyFactory
