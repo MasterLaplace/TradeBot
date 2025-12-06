@@ -48,7 +48,7 @@ jobs:
 
       - name: 🧪 Run tests
         run: |
-          python -m pytest tests/ -v --cov=bot_trade --cov-report=xml
+          python -m pytest tests/ -v --cov=src --cov-report=xml
 
       - name: 📊 Upload coverage
         uses: codecov/codecov-action@v4
@@ -79,50 +79,51 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirement.txt
 
-      - name: 🏃 Run backtest
+      - name: 🏃 Run backtest (CLI)
         run: |
           mkdir -p outputs
-          python main.py \
-            --dataset data/asset_b_train.csv \
-            --out outputs/ci_backtest.csv \
-            --transaction-fees 0.0001 \
-            --slippage 0.0
+          python tradebot.py backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output outputs/ci_backtest
 
-      - name: 📊 Calculate scores
+      - name: 📊 Calculate scores (via src engine)
         id: score
         run: |
-          python -c "
+          python - <<'PY'
           import sys
           sys.path.insert(0, '.')
-          from scoring.scoring import score
+          from src.data.sources import DataSourceFactory
+          from src.strategies import StrategyFactory
+          from src.engine.backtest import BacktestConfig, BacktestEngine, StrategyComparator
 
-          result = score('data/asset_b_train.csv', 'outputs/ci_backtest.csv', 0.0001, 0.0)
-
+          ds = DataSourceFactory.from_csv('data/crypto_btc_eth_4h_90d.csv')
+          strat = StrategyFactory.create('safe_profit')
+          cfg = BacktestConfig(initial_capital=10000)
+          engine = BacktestEngine(cfg)
+          res = engine.run(strat, ds)
+          comp = StrategyComparator(cfg)
+          bm = comp.calculate_benchmark(ds)
           print('='*50)
           print('📊 BACKTEST RESULTS')
           print('='*50)
-          for k, v in result.items():
-              print(f'{k}: {v:.4f}')
-          print()
-
-          # Set outputs for badge/summary
-          base = result.get('base_score', 0)
-          sharpe = result.get('sharpe_score', 0)
-          pnl = result.get('pnl_score', 0)
-
-          # Write to GitHub output
+          base = res.total_return
+          sharpe = res.sharpe_ratio
+          pnl = res.pnl if hasattr(res, 'pnl') else 0
+          print('Return:', base)
+          print('Sharpe:', sharpe)
+          print('Max DD:', res.max_drawdown)
+          print('Alpha vs 50/50:', base - bm['50_50'])
+          # Write outputs for summary
+          print('\n')
           with open('$GITHUB_OUTPUT', 'a') as f:
-              f.write(f'base_score={base:.4f}\n')
-              f.write(f'sharpe_score={sharpe:.4f}\n')
-              f.write(f'pnl_score={pnl:.4f}\n')
-
-          # Fail if base_score is negative (strategy underperforms)
-          if base < 0:
-              print('❌ Strategy underperforms baseline!')
-              sys.exit(1)
+            f.write(f'base_score={base:.4f}\n')
+            f.write(f'sharpe_score={sharpe:.4f}\n')
+            f.write(f'pnl_score={pnl:.4f}\n')
+          # Fail if underperform vs 50/50
+          if (base - bm['50_50']) < 0:
+            print('❌ Strategy underperforms 50/50 baseline!')
+            sys.exit(1)
           else:
-              print('✅ Strategy passes validation!')
-          "
+            print('✅ Strategy passes validation!')
+          PY
 
       - name: 📝 Job Summary
         run: |
@@ -166,9 +167,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 🧪 Test Docker image
+      - name: 🧪 Test Docker image: invoke `test` subcommand to verify imports
         run: |
-          docker run --rm trading-bot:latest python -c "from bot_trade import make_decision; print('✅ Docker OK')"
+          docker run --rm trading-bot:latest test
 
   # ----------------------------------------
   # 🔍 Code Quality
@@ -192,7 +193,7 @@ jobs:
 
       - name: 🔍 Run Ruff
         run: |
-          ruff check bot_trade.py main.py scoring/ --ignore E501,E402
+          ruff check src tests --ignore E501,E402
         continue-on-error: true  # Don't fail CI on style issues
 
   # ----------------------------------------

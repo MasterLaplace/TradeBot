@@ -17,11 +17,7 @@ services:
       - ./outputs:/app/outputs
       - ./experiments:/app/experiments
     command: >
-      python main.py
-        --dataset data/asset_b_train.csv
-        --out outputs/docker_backtest.csv
-        --transaction-fees 0.0001
-        --slippage 0.0
+      python tradebot.py backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output /app/outputs/docker_backtest
 
   # ----------------------------------------
   # Live paper trading (Binance)
@@ -38,6 +34,8 @@ services:
     volumes:
       - ./experiments/live:/app/experiments/live
     restart: unless-stopped
+    command: >
+      python tradebot.py paper --symbols $${LIVE_SYMBOLS} --interval $${LIVE_INTERVAL} --duration $${LIVE_DURATION} --strategy safe_profit --output /app/experiments/live/docker_live.csv
     # Uncomment to limit resources
     # deploy:
     #   resources:
@@ -60,13 +58,23 @@ services:
       python -c "
       import sys
       sys.path.insert(0, '.')
-      from scoring.scoring import score
-      result = score('data/asset_b_train.csv', 'outputs/docker_backtest.csv', 0.0001, 0.0)
+      from src.data.sources import DataSourceFactory
+      from src.strategies import StrategyFactory
+      from src.engine.backtest import BacktestConfig, BacktestEngine, StrategyComparator
+      ds = DataSourceFactory.from_csv('data/crypto_btc_eth_4h_90d.csv')
+      strat = StrategyFactory.create('safe_profit')
+      cfg = BacktestConfig(initial_capital=10000)
+      engine = BacktestEngine(cfg)
+      res = engine.run(strat, ds)
+      comp = StrategyComparator(cfg)
+      bm = comp.calculate_benchmark(ds)
       print('='*50)
       print('📊 SCORING RESULTS')
       print('='*50)
-      for k, v in result.items():
-          print(f'{k}: {v:.4f}')
+      print('Return:', res.total_return)
+      print('Sharpe:', res.sharpe_ratio)
+      print('Max DD:', res.max_drawdown)
+      print('Alpha vs 50/50:', res.total_return - bm['50_50'])
       "
     depends_on:
       backtest:
