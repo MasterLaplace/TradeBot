@@ -1,7 +1,7 @@
 # 📊 Trading Strategy Report
 
-**Generated:** 2025-12-06 13:08:03
-**Strategy:** blended_robust_ensemble
+**Generated:** 2025-12-06 13:28:42
+**Strategy:** safe_profit
 **Data Period:** 541 epochs
 
 ---
@@ -10,19 +10,19 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Return | -3.71% |
-| Annualized Return | -10.03% |
-| Volatility (Ann.) | 28.46% |
-| Sharpe Ratio | -0.35 |
-| Sortino Ratio | -0.44 |
-| Max Drawdown | 23.06% |
-| Win Rate | 49.7% |
+| Total Return | +0.85% |
+| Annualized Return | +2.40% |
+| Volatility (Ann.) | 9.44% |
+| Sharpe Ratio | 0.25 |
+| Sortino Ratio | 0.34 |
+| Max Drawdown | 7.28% |
+| Win Rate | 49.9% |
 
 ## 📊 Benchmark Comparison
 
 | Asset | Return |
 |-------|--------|
-| Strategy | **-3.71%** |
+| Strategy | **+0.85%** |
 | Asset A (BTC) | -19.53% |
 | Asset B (ETH) | -29.34% |
 
@@ -39,7 +39,7 @@
 
 ## 🔧 Strategy Parameters
 
-The `blended_robust_ensemble` strategy uses the following configuration:
+The `safe_profit` strategy uses the following configuration:
 - Optimized via Optuna robust optimization
 - Multi-asset portfolio management
 - Dynamic allocation based on market conditions
