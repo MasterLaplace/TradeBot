@@ -33,4 +33,4 @@ ccxt>=4.0.0
 # Dev tools
 pre-commit>=3.3.0
 black>=24.3.0
-ruff>=0.15.0
+ruff>=0.14.8,<0.15.0
