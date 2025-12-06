@@ -22,6 +22,8 @@ import bot_trade
 
 
 STRATEGIES = [
+    'safe_profit',     # NEW: Combines adaptive_trend + composite (safest + profitable)
+    'adaptive_trend',  # Best performer on single timeframe
     'baseline',
     'sma',
     'composite',
