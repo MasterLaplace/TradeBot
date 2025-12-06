@@ -127,10 +127,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirement.txt
 
-      - name: 🏃 Run backtest (CLI)
+      - name: 🏃 Generate CI dataset and Run backtest (CLI)
         run: |
-          mkdir -p outputs
-          python tradebot.py backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output outputs/ci_backtest
+          mkdir -p outputs data
+          cat > data/ci_data.csv <<'CSV'
+          epoch,Asset A,Asset B,Cash
+          0,111329.99,4299.38,1.0
+          1,111259.99,4293.48,1.0
+          2,111137.34,4306.19,1.0
+          3,111052.11,4311.87,1.0
+          4,111280.39,4291.78,1.0
+          5,112052.43,4312.41,1.0
+          6,112631.75,4371.64,1.0
+          7,112097.31,4293.00,1.0
+          8,112065.23,4306.37,1.0
+          CSV
+          python tradebot.py backtest --data data/ci_data.csv --strategy safe_profit --output outputs/ci_backtest
 
       - name: 📊 Calculate scores (via src engine)
         id: score
@@ -244,6 +256,7 @@ jobs:
           context: .
           target: production
           push: false
+          load: true
           tags: trading-bot:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -264,8 +277,21 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🏗️ Build Docker image for integration
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: production
+          push: false
+          load: true
+          tags: trading-bot:latest
+
       - name: 🐳 Run short backtest in Docker
         run: |
+          mkdir -p outputs
           docker run --rm -v ${GITHUB_WORKSPACE}/data:/app/data trading-bot:latest backtest --data data/crypto_btc_eth_1h_30d.csv --strategy safe_profit --output /app/outputs/ci_integration_backtest
 
   # ----------------------------------------
