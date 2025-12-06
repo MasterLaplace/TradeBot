@@ -24,7 +24,7 @@ tradebot.py               # 🎯 Point d'entrée unique
 src/
 ├── __init__.py
 ├── cli/                  # Interface ligne de commande
-│   ├── main.py          # Parser argparse
+│   ├── main.py          # Parser argparse (exposes `tradebot` CLI)
 │   └── commands.py      # Handlers des commandes
 ├── core/                 # Modèles de domaine
 │   └── models.py        # Price, Allocation, Portfolio
@@ -118,11 +118,14 @@ python tradebot.py paper --duration 3600 --strategy safe_profit
 ## 🐳 Docker
 
 ```bash
-# Build
-docker build -t tradebot .
+    # Build image
+    docker build -t trading-bot:latest .
 
-# Run
-docker run tradebot backtest --data data/crypto.csv
+    # Run a backtest inside container
+    docker run --rm -v $(pwd)/data:/app/data -v $(pwd)/outputs:/app/outputs trading-bot:latest backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output /app/outputs/docker_backtest
+
+    # Run paper trading (1 hour)
+    docker run --rm -v $(pwd)/experiments:/app/experiments trading-bot:latest paper --duration 3600 --strategy safe_profit --symbols BTCUSDT ETHUSDT
 ```
 
 ## 📁 Structure des données

@@ -15,7 +15,6 @@ services:
     volumes:
       - ./data:/app/data:ro
       - ./outputs:/app/outputs
-      - ./experiments:/app/experiments
     command: >
       python tradebot.py backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output /app/outputs/docker_backtest
 
@@ -32,7 +31,7 @@ services:
       - LIVE_INTERVAL=5
       - LIVE_DURATION=0  # 0 = infinite
     volumes:
-      - ./experiments/live:/app/experiments/live
+      - ./outputs:/app/outputs
     restart: unless-stopped
     command: >
       python tradebot.py paper --symbols $${LIVE_SYMBOLS} --interval $${LIVE_INTERVAL} --duration $${LIVE_DURATION} --strategy safe_profit --output /app/experiments/live/docker_live.csv

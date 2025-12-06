@@ -167,6 +167,41 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: 🧪 Sanity run (CI) - non-root
+        run: |
+          docker run --rm trading-bot:latest --help
+
+  # ----------------------------------------
+  # Publish to GHCR (manual dispatch only)
+  # ----------------------------------------
+  publish:
+    name: Publish Image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    needs: docker
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Build and Push Image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: production
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+
       - name: 🧪 Test Docker image: invoke `test` subcommand to verify imports
         run: |
           docker run --rm trading-bot:latest test
