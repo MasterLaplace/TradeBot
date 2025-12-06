@@ -8,6 +8,9 @@ venv:
 install: venv
 	source venv/bin/activate && pip install -r requirement.txt
 
+precommit-install:
+	source venv/bin/activate && pip install pre-commit && pre-commit install
+
 test:
 	source venv/bin/activate && python -m pytest tests/ -v
 

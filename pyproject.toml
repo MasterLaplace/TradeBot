@@ -1,0 +1,10 @@
+[tool.black]
+line-length = 88
+py38 = false
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "C", "N", "B"]
+
+[tool.isort]
+profile = "black"

@@ -126,6 +126,18 @@ python tradebot.py paper --duration 3600 --strategy safe_profit
 
     # Run paper trading (1 hour)
     docker run --rm -v $(pwd)/experiments:/app/experiments trading-bot:latest paper --duration 3600 --strategy safe_profit --symbols BTCUSDT ETHUSDT
+
+## 📦 Publish
+
+Push a semantic tag to trigger automatic image publishing to GHCR (GitHub Container Registry):
+
+```bash
+# Tag and push
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The CI will build and push the image to `ghcr.io/<owner>/<repo>` if the workflow detects a tag push.
 ```
 
 ## 📁 Structure des données
