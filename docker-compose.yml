@@ -1,0 +1,90 @@
+# ============================================
+# 🐳 Docker Compose - Trading Bot
+# ============================================
+# Services for backtesting and live paper trading
+
+services:
+  # ----------------------------------------
+  # Backtest service - run simulations
+  # ----------------------------------------
+  backtest:
+    build:
+      context: .
+      target: production
+    container_name: trading-bot-backtest
+    volumes:
+      - ./data:/app/data:ro
+      - ./outputs:/app/outputs
+      - ./experiments:/app/experiments
+    command: >
+      python main.py
+        --dataset data/asset_b_train.csv
+        --out outputs/docker_backtest.csv
+        --transaction-fees 0.0001
+        --slippage 0.0
+
+  # ----------------------------------------
+  # Live paper trading (Binance)
+  # ----------------------------------------
+  live-binance:
+    build:
+      context: .
+      target: live
+    container_name: trading-bot-live
+    environment:
+      - LIVE_SYMBOLS=BTCUSDT,ETHUSDT
+      - LIVE_INTERVAL=5
+      - LIVE_DURATION=0  # 0 = infinite
+    volumes:
+      - ./experiments/live:/app/experiments/live
+    restart: unless-stopped
+    # Uncomment to limit resources
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 256M
+
+  # ----------------------------------------
+  # Scoring service - evaluate results
+  # ----------------------------------------
+  score:
+    build:
+      context: .
+      target: production
+    container_name: trading-bot-score
+    volumes:
+      - ./data:/app/data:ro
+      - ./outputs:/app/outputs
+    command: >
+      python -c "
+      import sys
+      sys.path.insert(0, '.')
+      from scoring.scoring import score
+      result = score('data/asset_b_train.csv', 'outputs/docker_backtest.csv', 0.0001, 0.0)
+      print('='*50)
+      print('📊 SCORING RESULTS')
+      print('='*50)
+      for k, v in result.items():
+          print(f'{k}: {v:.4f}')
+      "
+    depends_on:
+      backtest:
+        condition: service_completed_successfully
+
+  # ----------------------------------------
+  # Test suite
+  # ----------------------------------------
+  test:
+    build:
+      context: .
+      target: production
+    container_name: trading-bot-test
+    command: python -m pytest tests/ -v
+    volumes:
+      - ./tests:/app/tests:ro
+
+# Named volumes for persistence
+volumes:
+  outputs:
+  experiments:

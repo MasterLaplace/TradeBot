@@ -1,13 +1,182 @@
-# Bot Trade Project
+# 🤖 Hackathon Trading Bot
 
-Ce dépôt contient un bot de trading simple (`bot_trade.py`) avec un backtester et un script principal (`main.py`) permettant d'exécuter le bot sur un CSV de prix local (ex : `data/asset_b_train.csv`).
+Bot de trading algorithmique robuste avec gestion de portefeuille multi-actifs.
 
-## Objectif
+## 🎯 Résultats Clés
 
-- Fournir un ensemble minimal pour développer, tester et améliorer des stratégies de trading et mesurer leurs performances avec des métriques financières (Sharpe, PnL, Max Drawdown...).
-- Maintenir un journal de recherche évolutif ("Research Log") pour consigner hypothèses, tests, résultats et améliorations.
+Sur 90 jours de données crypto réelles (BTC/ETH), nos stratégies surperforment significativement :
 
-## Installation & Setup
+| Stratégie | Return | vs 50/50 Buy&Hold |
+|-----------|--------|-------------------|
+| **baseline** | -3.75% | **+20.69%** |
+| **blended_robust** | -3.77% | **+20.67%** |
+| **blended_robust_ensemble** | -3.77% | **+20.67%** |
+| Buy & Hold BTC | -19.53% | - |
+| 50/50 Buy & Hold | -24.44% | - |
+| Buy & Hold ETH | -29.34% | - |
+
+La stratégie défensive protège le capital pendant les marchés baissiers.
+
+## 🏗️ Architecture
+
+```
+.
+├── bot_trade.py              # Core trading logic (juge-compatible)
+├── scoring/                  # Scoring et évaluation
+│   └── scoring.py
+├── data/                     # Datasets
+│   ├── asset_b_train.csv     # Données hackathon
+│   └── crypto_*.csv          # Données crypto réelles
+├── scripts/
+│   ├── live_connector_binance.py    # REST connector Binance
+│   ├── live_connector_binance_ws.py # WebSocket connector
+│   ├── paper_trader.py              # Paper trading simulateur
+│   ├── fetch_historical_data.py     # Téléchargement données
+│   ├── backtest_real_data.py        # Backtesting
+│   └── compare_strategies.py        # Comparaison stratégies
+├── experiments/              # Logs et résultats
+├── Dockerfile               # Conteneurisation
+├── docker-compose.yml       # Orchestration
+└── .github/workflows/ci.yml # CI/CD
+```
+
+## 🚀 Installation
+
+```bash
+# Cloner le repo
+git clone <repo-url>
+cd Hackaton
+
+# Créer l'environnement
+python3 -m venv venv
+source venv/bin/activate
+
+# Installer les dépendances
+pip install -r requirement.txt
+pip install requests websockets aiohttp
+```
+
+## 📈 Utilisation
+
+### 1. Télécharger des données historiques
+
+```bash
+# BTC + ETH sur 90 jours (intervalle 4h)
+python scripts/fetch_historical_data.py \
+  --symbol BTCUSDT \
+  --second-symbol ETHUSDT \
+  --interval 4h \
+  --days 90 \
+  --out data/crypto_90d.csv
+```
+
+### 2. Backtester une stratégie
+
+```bash
+python scripts/backtest_real_data.py \
+  --data data/crypto_90d.csv \
+  --capital 10000 \
+  --plot experiments/backtest.png
+```
+
+### 3. Comparer les stratégies
+
+```bash
+python scripts/compare_strategies.py --data data/crypto_90d.csv
+```
+
+### 4. Paper Trading (temps réel)
+
+```bash
+python scripts/paper_trader.py \
+  --symbols BTCUSDT ETHUSDT \
+  --initial-cash 10000 \
+  --interval 60 \
+  --duration 3600
+```
+
+### 5. Live Polling (monitor)
+
+```bash
+python scripts/live_connector_binance.py \
+  --symbols BTCUSDT ETHUSDT \
+  --interval 30 \
+  --duration 600
+```
+
+## 🐳 Docker
+
+```bash
+# Backtest
+docker-compose run backtest
+
+# Paper trading live
+docker-compose up live-paper
+```
+
+## 🎛️ Stratégies Disponibles
+
+| Stratégie | Description |
+|-----------|-------------|
+| `baseline` | Allocation fixe conservative |
+| `sma` | Simple Moving Average |
+| `composite` | Multi-indicateurs |
+| `blended` | Combinaison pondérée |
+| `blended_robust` | Paramètres optimisés Optuna (Trial 113) |
+| `blended_robust_ensemble` | Moyenne des 5 meilleurs candidats |
+| `blended_robust_safe` | Version avec caps d'exposition |
+
+## 📊 API Juge (Hackathon)
+
+```python
+from bot_trade import make_decision
+
+# Single asset
+decision = make_decision(epoch=42, price=100.5)
+# → {'Asset A': 0.15, 'Asset B': 0.45, 'Cash': 0.40}
+
+# Multi-asset
+decision = make_decision(epoch=42, price=89500.0, priceB=3050.0)
+```
+
+## 🔧 Configuration
+
+Les paramètres optimisés sont dans `bot_trade.py`:
+
+```python
+TOP_CANDIDATES = [
+    {'sma_short': 8, 'sma_long': 27, 'momentum_window': 11, ...},
+    ...
+]
+```
+
+## 📁 Sources de Données
+
+- **Binance Public API** - Gratuit, pas d'API key nécessaire
+  - REST: `api.binance.com/api/v3/klines`
+  - WebSocket: `stream.binance.com`
+- **Données Hackathon** - `data/asset_b_train.csv`
+
+## 🧪 Tests
+
+```bash
+# Test API Binance
+python -c "import requests; r=requests.get('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'); print(r.json())"
+
+# Test bot
+python -c "from bot_trade import make_decision; print(make_decision(0, 100))"
+```
+
+## 📝 Notes
+
+- Le bot est conçu pour protéger le capital en période de volatilité
+- Les frais de transaction (0.1% par défaut) impactent les stratégies à haute fréquence
+- Recommandation: utiliser des intervalles de 1h+ pour réduire les frais
+- Stratégie recommandée: `blended_robust_ensemble`
+
+---
+
+## Installation & Setup (Legacy)
 
 Utilisez le script `setup_env.sh` qui crée un environnement virtuel, met à jour `pip` et installe les dépendances listées dans `requirement.txt`.
 

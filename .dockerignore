@@ -1,0 +1,21 @@
+# Files to exclude from Docker context
+venv/
+tmp_venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.git/
+.gitignore
+*.md
+*.png
+*.zip
+.env
+.env.*
+experiments/
+outputs/
+*.log
+*.db
+.vscode/
+.idea/
