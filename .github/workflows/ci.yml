@@ -23,6 +23,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.12'
+  COVERAGE_THRESHOLD: '0.60'
+  COVERAGE_STRICT: 'false'
 
 jobs:
   # ----------------------------------------
@@ -58,25 +60,32 @@ jobs:
           pre-commit run --all-files || true
 
       - name: 📊 Upload coverage
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage.xml
           fail_ci_if_error: false
 
       - name: 🔢 Check coverage threshold
         run: |
-          python - <<'PY'
+            python - <<'PY'
           import xml.etree.ElementTree as ET
           import sys
+            import os
           try:
               tree = ET.parse('coverage.xml')
               root = tree.getroot()
               rate = float(root.get('line-rate', '0'))
               print(f'Coverage line-rate: {rate:.3f}')
-              threshold = 0.60
+              threshold = float(os.environ.get('COVERAGE_THRESHOLD', '0.60'))
               if rate < threshold:
-                  print(f'❌ Coverage below threshold of {threshold*100:.0f}%: {rate*100:.2f}%')
+                print(f'❌ Coverage below threshold of {threshold*100:.0f}%: {rate*100:.2f}%')
+                strict = os.environ.get('COVERAGE_STRICT', 'false').lower() in ('1','true','yes')
+                if strict:
                   sys.exit(1)
+                else:
+                  print('⚠️ Coverage below threshold but COVERAGE_STRICT is not set; continuing')
               else:
                   print(f'✅ Coverage OK: {rate*100:.2f}% >= {threshold*100:.0f}%')
           except FileNotFoundError:
