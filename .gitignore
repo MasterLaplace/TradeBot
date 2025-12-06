@@ -69,6 +69,8 @@ secrets/
 htmlcov/
 .coverage
 .coverage.*
+coverage.xml
+coverage-*.xml
 
 # Optuna
 *.db
