@@ -179,6 +179,16 @@ jobs:
             f.write(f'base_score={base:.4f}\n')
             f.write(f'sharpe_score={sharpe:.4f}\n')
             f.write(f'pnl_score={pnl:.4f}\n')
+          # Also write CSV metrics for artifact upload
+          import os
+          os.makedirs('outputs', exist_ok=True)
+          with open('outputs/ci_backtest.csv', 'w') as csvfile:
+            csvfile.write('metric,value\n')
+            csvfile.write(f'base_return,{base:.6f}\n')
+            csvfile.write(f'sharpe,{sharpe:.6f}\n')
+            csvfile.write(f'pnl,{pnl:.6f}\n')
+            csvfile.write(f'max_drawdown,{res.max_drawdown:.6f}\n')
+            csvfile.write(f'alpha_vs_50_50,{(base - bm["50_50"]):.6f}\n')
           # Fail if underperform vs 50/50 (controlled by VALIDATION_FAIL_ON_UNDERPERFORM)
           fail_on_underperform = os.environ.get('VALIDATION_FAIL_ON_UNDERPERFORM', 'false').lower() in ('1', 'true', 'yes')
           if (base - bm['50_50']) < 0:
@@ -206,7 +216,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backtest-results
-          path: outputs/ci_backtest.csv
+          path: outputs/ci_backtest/**
           retention-days: 30
 
   # ----------------------------------------
