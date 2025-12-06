@@ -154,7 +154,7 @@ jobs:
           from src.strategies import StrategyFactory
           from src.engine.backtest import BacktestConfig, BacktestEngine, StrategyComparator
 
-          ds = DataSourceFactory.from_csv('data/crypto_btc_eth_4h_90d.csv')
+          ds = DataSourceFactory.from_csv('data/ci_data.csv')
           strat = StrategyFactory.create('safe_profit')
           cfg = BacktestConfig(initial_capital=10000)
           engine = BacktestEngine(cfg)
@@ -225,8 +225,16 @@ jobs:
 
       - name: 🏃 Run quick backtest
         run: |
-          mkdir -p outputs
-          python tradebot.py backtest --data data/crypto_btc_eth_1h_30d.csv --strategy safe_profit --output outputs/nightly_backtest
+          mkdir -p outputs data
+          cat > data/ci_data.csv <<'CSV'
+          epoch,Asset A,Asset B,Cash
+          0,111329.99,4299.38,1.0
+          1,111259.99,4293.48,1.0
+          2,111137.34,4306.19,1.0
+          3,111052.11,4311.87,1.0
+          4,111280.39,4291.78,1.0
+          CSV
+          python tradebot.py backtest --data data/ci_data.csv --strategy safe_profit --output outputs/nightly_backtest
 
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
@@ -291,8 +299,20 @@ jobs:
 
       - name: 🐳 Run short backtest in Docker
         run: |
-          mkdir -p outputs
-          docker run --rm -v ${GITHUB_WORKSPACE}/data:/app/data trading-bot:latest backtest --data data/crypto_btc_eth_1h_30d.csv --strategy safe_profit --output /app/outputs/ci_integration_backtest
+          mkdir -p outputs data
+          cat > data/ci_data.csv <<'CSV'
+          epoch,Asset A,Asset B,Cash
+          0,111329.99,4299.38,1.0
+          1,111259.99,4293.48,1.0
+          2,111137.34,4306.19,1.0
+          3,111052.11,4311.87,1.0
+          4,111280.39,4291.78,1.0
+          5,112052.43,4312.41,1.0
+          6,112631.75,4371.64,1.0
+          7,112097.31,4293.00,1.0
+          8,112065.23,4306.37,1.0
+          CSV
+          docker run --rm -v ${GITHUB_WORKSPACE}/data:/app/data trading-bot:latest backtest --data data/ci_data.csv --strategy safe_profit --output /app/outputs/ci_integration_backtest
 
   # ----------------------------------------
   # Publish to GHCR (manual dispatch only)
