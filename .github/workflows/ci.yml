@@ -278,7 +278,7 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
 
-      - name: 🧪 Test Docker image: invoke `test` subcommand to verify imports
+      - name: "🧪 Test Docker image: invoke `test` subcommand to verify imports"
         run: |
           docker run --rm trading-bot:latest test
 
