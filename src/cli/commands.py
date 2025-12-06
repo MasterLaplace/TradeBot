@@ -362,7 +362,7 @@ def handle_report(args: Namespace) -> int:
 def handle_list(args: Namespace) -> int:
     """Handle 'list' command."""
     print("📋 Available Strategies")
-    print("=" * 60)
+    print("=" * 80)
 
     strategies = {
         'safe_profit': 'Conservative strategy combining multiple signals. Best alpha.',
@@ -370,6 +370,19 @@ def handle_list(args: Namespace) -> int:
         'baseline': 'Simple momentum-based strategy.',
         'sma': 'Simple Moving Average crossover strategy.',
         'composite': 'Multi-indicator: SMA + stoploss + volatility scaling.',
+        'stoploss': 'Drawdown protection - exits when peak drawdown exceeded.',
+        'volscale': 'Volatility scaling - reduces exposure in volatile markets.',
+        'blended': 'Optuna-optimized blend of momentum + composite indicators.',
+        'blended_tuned': 'Blended with walk-forward tuned parameters.',
+        'blended_mo_tuned': 'Blended with multi-objective tuned parameters.',
+        'blended_robust': 'Blended with robust parameters (Optuna trial 113).',
+        'blended_robust_safe': 'Blended robust with max exposure cap.',
+        'blended_robust_ensemble': 'Ensemble of top 5 blended configs (alias).',
+        'sma_stoploss': 'SMA with drawdown-based stoploss.',
+        'sma_volfilter': 'SMA with volatility filter.',
+        'sma_smooth_stop': 'SMA with smoothing, partial stop, and vol scaling.',
+        'adaptive_baseline': 'Baseline with volatility and stoploss gates.',
+        'ensemble': 'Ensemble of top 5 blended configs for robust predictions.',
     }
 
     for name in StrategyFactory.available():
@@ -378,8 +391,10 @@ def handle_list(args: Namespace) -> int:
         print(f"    {desc}")
 
     print()
-    print("=" * 60)
+    print("=" * 80)
     print("Use: tradebot backtest --strategy <name> --data <file>")
+
+    return 0
 
     return 0
 
