@@ -1,23 +1,21 @@
-matplotlib
-pandas
-numpy
-optuna
-requests
-ccxt
-alpaca-trade-api
+# Core Dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+requests>=2.31.0
 
-# Optional dependencies below (uncomment if needed)
-# scipy
-# scikit-learn
-# xgboost
-# lightgbm
-# catboost
-# nltk
-# spacy
-# transformers
-# optuna
-# scikit-optimize
-# numba
+# Trading & API
+ccxt>=4.0.0
+# alpaca-trade-api>=3.0.0  # Optional: for Alpaca integration
+
+# Optimization (optional)
+# optuna>=3.0.0
+
+# Advanced ML (optional - uncomment if needed)
+# scipy>=1.10.0
+# scikit-learn>=1.3.0
+# xgboost>=2.0.0
+# lightgbm>=4.0.0
 # joblib
 # python-dateutil
 # pyyaml
