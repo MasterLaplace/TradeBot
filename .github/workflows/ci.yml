@@ -59,13 +59,17 @@ jobs:
         run: |
           pre-commit run --all-files || true
 
-      - name: 📊 Upload coverage
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
-          fail_ci_if_error: false
+      - name: 📊 Upload coverage (optional)
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -z "$CODECOV_TOKEN" ]; then
+            echo "No CODECOV_TOKEN set - skipping upload to Codecov"
+          else
+            echo "Uploading coverage to Codecov..."
+            # Use codecov-action bash uploader as a fallback (action requires token) \
+            && curl -s https://codecov.io/bash | bash -s -- -f coverage.xml -t "$CODECOV_TOKEN" || true
+          fi
 
       - name: 🔢 Check coverage threshold
         run: |
