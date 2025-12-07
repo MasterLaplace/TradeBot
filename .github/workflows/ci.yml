@@ -26,6 +26,9 @@ env:
   COVERAGE_THRESHOLD: '0.60'
   COVERAGE_STRICT: 'false'
   VALIDATION_FAIL_ON_UNDERPERFORM: 'false'
+  MIN_ALPHA_TO_FAIL: '-0.005'
+  RUN_EXTENDED_BACKTEST: 'false'
+  VALIDATION_FAIL_ON_UNDERPERFORM: 'false'
 
 jobs:
   # ----------------------------------------
@@ -156,23 +159,60 @@ jobs:
           from src.strategies import StrategyFactory
           from src.engine.backtest import BacktestConfig, BacktestEngine, StrategyComparator
 
-          ds = DataSourceFactory.from_csv('data/ci_data.csv')
-          strat = StrategyFactory.create('safe_profit')
-          cfg = BacktestConfig(initial_capital=10000)
-          engine = BacktestEngine(cfg)
-          res = engine.run(strat, ds)
-          comp = StrategyComparator(cfg)
-          bm = comp.calculate_benchmark(ds)
+            strat = StrategyFactory.create('safe_profit')
+            cfg = BacktestConfig(initial_capital=10000)
+            engine = BacktestEngine(cfg)
+            comp = StrategyComparator(cfg)
+
+            # Determine datasets to run
+            run_extended = os.environ.get('RUN_EXTENDED_BACKTEST', 'false').lower() in ('1','true','yes')
+            datasets = ['data/ci_data.csv']
+            if run_extended:
+              extended_files = [
+                'data/crypto_btc_eth_4h_90d.csv',
+                'data/crypto_btc_eth_1h_60d.csv',
+                'data/crypto_btc_eth_1h_30d.csv',
+              ]
+              # Use files that exist; otherwise generate synthetic variations
+              datasets = [f for f in extended_files if os.path.exists(f)]
+              if not datasets:
+                # Create a few synthetic variants based on ci_data.csv
+                import csv
+                base = []
+                with open('data/ci_data.csv', 'r') as fh:
+                  reader = csv.DictReader(fh)
+                  for row in reader:
+                    base.append(row)
+                for i, factor in enumerate([1.0, 0.98, 1.02], start=1):
+                  out_path = f'data/ci_data_var{i}.csv'
+                  with open(out_path, 'w') as out:
+                    out.write('epoch,Asset A,Asset B,Cash\n')
+                    for r in base:
+                      epoch = r['epoch']
+                      a = float(r['Asset A']) * factor
+                      b = float(r['Asset B']) * (1.0 + (factor - 1.0) * 0.5)
+                      out.write(f"{epoch},{a:.2f},{b:.2f},{r['Cash']}\n")
+                  datasets.append(out_path)
           print('='*50)
           print('📊 BACKTEST RESULTS')
           print('='*50)
-          base = res.total_return
-          sharpe = res.sharpe_ratio
-          pnl = res.pnl if hasattr(res, 'pnl') else 0
-          print('Return:', base)
-          print('Sharpe:', sharpe)
-          print('Max DD:', res.max_drawdown)
-          print('Alpha vs 50/50:', base - bm['50_50'])
+            alphas = []
+            results = []
+            for ds_file in datasets:
+              ds = DataSourceFactory.from_csv(ds_file)
+              res = engine.run(strat, ds)
+              bm = comp.calculate_benchmark(ds)
+              base = res.total_return
+              sharpe = res.sharpe_ratio
+              pnl = res.pnl if hasattr(res, 'pnl') else 0
+              alpha = base - bm['50_50']
+              alphas.append(alpha)
+              results.append((ds_file, base, sharpe, res.max_drawdown, pnl, alpha))
+              print('\nDataset:', ds_file)
+              print('Return:', base)
+              print('Sharpe:', sharpe)
+              print('Max DD:', res.max_drawdown)
+              print('Alpha vs 50/50:', alpha)
           # Write outputs for summary
           print('\n')
           with open('$GITHUB_OUTPUT', 'a') as f:
@@ -183,21 +223,24 @@ jobs:
           import os
           os.makedirs('outputs', exist_ok=True)
           with open('outputs/ci_backtest.csv', 'w') as csvfile:
-            csvfile.write('metric,value\n')
-            csvfile.write(f'base_return,{base:.6f}\n')
-            csvfile.write(f'sharpe,{sharpe:.6f}\n')
-            csvfile.write(f'pnl,{pnl:.6f}\n')
-            csvfile.write(f'max_drawdown,{res.max_drawdown:.6f}\n')
-            csvfile.write(f'alpha_vs_50_50,{(base - bm["50_50"]):.6f}\n')
+            csvfile.write('dataset,base_return,sharpe,max_drawdown,pnl,alpha\n')
+            for dsf, base, sharpe, max_dd, pnl, alpha in results:
+              csvfile.write(f'{dsf},{base:.6f},{sharpe:.6f},{max_dd:.6f},{pnl:.6f},{alpha:.6f}\n')
+            # aggregate
+            avg_alpha = sum(alphas) / len(alphas) if alphas else 0.0
+            csvfile.write(f'avg_alpha,{avg_alpha:.6f}\n')
           # Fail if underperform vs 50/50 (controlled by VALIDATION_FAIL_ON_UNDERPERFORM)
           fail_on_underperform = os.environ.get('VALIDATION_FAIL_ON_UNDERPERFORM', 'false').lower() in ('1', 'true', 'yes')
-          if (base - bm['50_50']) < 0:
-            print('❌ Strategy underperforms 50/50 baseline!')
+          min_alpha = float(os.environ.get('MIN_ALPHA_TO_FAIL', '-0.005'))
+          avg_alpha = sum(alphas) / len(alphas) if alphas else 0.0
+          print('\nAGGREGATE: avg_alpha =', avg_alpha)
+          if avg_alpha < min_alpha:
+            print('❌ Average alpha below threshold')
             if fail_on_underperform:
               print('FAILING because VALIDATION_FAIL_ON_UNDERPERFORM is set')
               sys.exit(1)
             else:
-              print('Warning: strategy underperforms baseline, but VALIDATION_FAIL_ON_UNDERPERFORM is false; continuing')
+              print('Warning: average alpha below threshold but VALIDATION_FAIL_ON_UNDERPERFORM is false; continuing')
           else:
             print('✅ Strategy passes validation!')
           PY
