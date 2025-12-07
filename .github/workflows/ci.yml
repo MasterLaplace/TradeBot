@@ -28,7 +28,6 @@ env:
   VALIDATION_FAIL_ON_UNDERPERFORM: 'false'
   MIN_ALPHA_TO_FAIL: '-0.005'
   RUN_EXTENDED_BACKTEST: 'false'
-  VALIDATION_FAIL_ON_UNDERPERFORM: 'false'
 
 jobs:
   # ----------------------------------------
