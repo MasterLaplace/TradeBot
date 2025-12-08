@@ -294,6 +294,10 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@v4
 
+      - name: 🔧 Compute GHCR repo name (lowercase)
+        run: |
+          echo "GHCR_REPO=$(echo $GITHUB_REPOSITORY | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: 🔐 Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -309,8 +313,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ toLower(github.repository) }}:latest
-            ghcr.io/${{ toLower(github.repository) }}:${{ github.sha }}
+            ghcr.io/${{ env.GHCR_REPO }}:latest
+            ghcr.io/${{ env.GHCR_REPO }}:${{ github.sha }}
 
       - name: "🧪 Test Docker image: invoke `test` subcommand to verify imports"
         run: |
