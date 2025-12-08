@@ -184,6 +184,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
       - name: 📦 Install dependencies
         run: |
@@ -265,6 +266,8 @@ jobs:
           load: true
           platforms: linux/amd64
           tags: trading-bot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: 🐳 Run short backtest in Docker
         run: |
@@ -345,6 +348,8 @@ jobs:
             --tag ghcr.io/${GHCR_REPO}:latest \
             --tag ghcr.io/${GHCR_REPO}:${GITHUB_SHA} \
             --target production \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --push \
             .
 
@@ -367,6 +372,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
       - name: 📦 Install linters
         run: |
