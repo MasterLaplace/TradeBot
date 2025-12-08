@@ -435,8 +435,6 @@ def handle_list(args: Namespace) -> int:
 
     return 0
 
-    return 0
-
 
 # =============================================================================
 # TEST COMMAND
@@ -446,6 +444,11 @@ def handle_test(args: Namespace) -> int:
     """Handle 'test' command."""
     print("🔌 Testing Binance API connection...")
     print()
+
+    import os
+    skip_api_fail = getattr(args, 'skip_api_fail', False) or (
+        os.environ.get('SKIP_API_TESTS', '').lower() in ('1', 'true', 'yes')
+    )
 
     try:
         source = BinanceRESTSource(
@@ -463,6 +466,9 @@ def handle_test(args: Namespace) -> int:
 
     except Exception as e:
         print(f"❌ Connection failed: {e}")
+        if skip_api_fail:
+            print("⚠️  Ignoring API failure due to `--skip-api-fail` or SKIP_API_TESTS=1")
+            return 0
         return 1
 
     return 0
