@@ -10,7 +10,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -73,7 +73,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           release_name: ${{ github.ref_name }}
           body: |
-            Release ${{ github.ref_name }} created by CI. See artifacts and Docker image (ghcr.io/${{ github.repository }}:${{ github.ref_name }}).
+            Release ${{ github.ref_name }} created by CI. See artifacts and Docker image (ghcr.io/${{ env.GHCR_REPO }}:${{ github.ref_name }}).
           draft: false
           prerelease: false
         env:

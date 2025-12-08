@@ -355,7 +355,8 @@ jobs:
 
       - name: "🧪 Test Docker image: invoke `test` subcommand to verify imports"
         run: |
-          docker run --rm trading-bot:latest test
+          docker pull ghcr.io/${GHCR_REPO}:latest
+          docker run --rm ghcr.io/${GHCR_REPO}:latest test
 
   # ----------------------------------------
   # 🔍 Code Quality
