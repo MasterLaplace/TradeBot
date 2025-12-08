@@ -316,7 +316,7 @@ jobs:
           driver: docker-container
           install: true
 
-      - name: 🧪 Debug: Docker buildx info
+      - name: "🧪 Debug: Docker buildx info"
         run: |
           docker buildx version || true
           docker buildx inspect --bootstrap || true
