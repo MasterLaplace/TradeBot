@@ -178,7 +178,7 @@ class BacktestEngine:
         Returns:
             BacktestResult with performance metrics
         """
-        # Initialize
+        
         strategy.reset()
         portfolio = Portfolio(cash=self.config.initial_capital)
         prices = data_source.fetch_prices()
@@ -186,33 +186,33 @@ class BacktestEngine:
         if not prices:
             raise ValueError("No price data available for backtest")
 
-        # Track results
+        
         portfolio_values: List[float] = []
         allocations: List[Allocation] = []
         total_fees = 0.0
         num_trades = 0
 
-        # Simulation loop
+        
         price_history: List[Price] = []
 
         for epoch, price in enumerate(prices):
             price_history.append(price)
 
-            # Get strategy decision
+            
             allocation = strategy.decide(epoch, price_history)
             allocations.append(allocation)
 
-            # Record value before rebalance
+            
             current_value = portfolio.value(price)
             portfolio_values.append(current_value)
 
-            # Rebalance portfolio
+            
             fees = portfolio.rebalance(allocation, price, self.config.fee_rate)
             if fees > 0:
                 num_trades += 1
                 total_fees += fees
 
-        # Calculate final metrics
+        
         final_value = (
             portfolio_values[-1]
             if portfolio_values

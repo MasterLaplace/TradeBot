@@ -39,14 +39,14 @@ def create_parser() -> argparse.ArgumentParser:
         description="""
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    🤖 TradeBot v2.0                              ║
-║           Unified Trading Bot Command Line Interface              ║
+║           Unified Trading Bot Command Line Interface             ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  A clean, SOLID architecture trading application providing:       ║
-║  • Multiple trading strategies (safe_profit, adaptive, etc.)      ║
-║  • Backtesting on historical data                                 ║
-║  • Paper trading with live Binance prices                         ║
-║  • Data fetching from Binance API                                 ║
-║  • Strategy comparison and reporting                              ║
+║  A clean, SOLID architecture trading application providing:      ║
+║  • Multiple trading strategies (safe_profit, adaptive, etc.)     ║
+║  • Backtesting on historical data                                ║
+║  • Paper trading with live Binance prices                        ║
+║  • Data fetching from Binance API                                ║
+║  • Strategy comparison and reporting                             ║
 ╚══════════════════════════════════════════════════════════════════╝
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -408,6 +408,65 @@ Examples:
         metavar=('SYM_A', 'SYM_B'),
         help='Symbols to test (default: BTCUSDT ETHUSDT)'
     )
+    test_parser.add_argument(
+        '--skip-api-fail',
+        action='store_true',
+        default=False,
+        help='Treat API connection failures as warnings (exit code 0)'
+    )
+
+    # --------------------------------------------------------------------------
+    # PARALLEL BACKTEST COMMAND
+    # --------------------------------------------------------------------------
+
+    parallel_parser = subparsers.add_parser(
+        'parallel',
+        help='Run parallel backtests for multiple strategies',
+        description='Execute backtests in parallel across strategies and datasets.'
+    )
+
+    parallel_parser.add_argument(
+        '--datasets', '-d', nargs='+', required=False, help='Dataset CSV files (required for backtest mode). Supports glob patterns.'
+    )
+    parallel_parser.add_argument(
+        '--strategies', '-s', nargs='*', help='Strategy names to run (default: all available)'
+    )
+    parallel_parser.add_argument(
+        '--workers', '-w', type=int, default=None, help='Number of parallel workers (default: cpu_count)'
+    )
+    parallel_parser.add_argument(
+        '--mode', choices=['backtest', 'paper'], default='backtest', help='Mode: backtest (default) or paper (live simulated trading)'
+    )
+    parallel_parser.add_argument(
+        '--symbols', nargs=2, default=['BTCUSDT', 'ETHUSDT'], metavar=('SYM_A', 'SYM_B'), help='Symbols for paper mode (default: BTCUSDT ETHUSDT)'
+    )
+    parallel_parser.add_argument(
+        '--duration', type=int, default=120, help='Duration in seconds for paper mode per run (default: 120)'
+    )
+    parallel_parser.add_argument(
+        '--interval', type=float, default=5.0, help='Seconds between price ticks for paper mode (default: 5.0)'
+    )
+    parallel_parser.add_argument(
+        '--use-ws', action='store_true', default=False, help='Use WebSocket-based centralized broadcaster for paper mode (reduces REST calls)'
+    )
+    parallel_parser.add_argument(
+        '--capital', '-c', type=float, default=10000.0, help='Initial capital for backtests (default: 10000)'
+    )
+    parallel_parser.add_argument(
+        '--fee-rate', type=float, default=0.001, help='Fee rate for backtests (default: 0.001)'
+    )
+    parallel_parser.add_argument(
+        '--per-strategy-dir', '-p', help='Optional directory to write per-strategy CSVs (one file per strategy)'
+    )
+    parallel_parser.add_argument(
+        '--append', action='store_true', default=False, help='Append to existing summary CSV instead of overwriting'
+    )
+    parallel_parser.add_argument(
+        '--no-progress', action='store_true', default=False, help='Disable progress bar during execution'
+    )
+    parallel_parser.add_argument(
+        '--output', '-o', default='outputs/parallel_backtest_summary.csv', help='Output CSV summary path'
+    )
 
     return parser
 
@@ -438,6 +497,8 @@ def main(args: Optional[list] = None) -> int:
         handle_report,
         handle_list,
         handle_test,
+        handle_parallel,
+        get_command,
     )
 
     handlers = {
@@ -448,9 +509,14 @@ def main(args: Optional[list] = None) -> int:
         'report': handle_report,
         'list': handle_list,
         'test': handle_test,
+        'parallel': handle_parallel,
     }
 
     handler = handlers.get(parsed.command)
+    if not handler:
+        cmd = get_command(parsed.command)
+        if cmd:
+            handler = lambda a: cmd.execute(a)
     if handler:
         try:
             return handler(parsed)

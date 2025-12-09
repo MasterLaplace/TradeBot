@@ -27,7 +27,8 @@ ccxt>=4.0.0
 # python-utils
 # python-dotenv
 # click
-# tqdm
+tqdm>=4.0.0
+websockets>=11.0.0
 # python-toolz
 # python-backoff
 # Dev tools

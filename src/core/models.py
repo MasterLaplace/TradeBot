@@ -80,14 +80,17 @@ class Portfolio:
         price: Price,
         fee_rate: float = 0.001,
     ) -> float:
-        """Rebalance portfolio to target allocation. Returns fees paid."""
-        current_value = self.value(price)
+        """Rebalance portfolio to target allocation and return fees paid.
 
+        The method calculates the target quantities for each asset based on
+        the current portfolio value and the target allocation, computes the
+        fees for the trades, updates the portfolio quantities and cash, and
+        returns the total fees charged.
+        """
+        current_value = self.value(price)
         target_a_value = current_value * allocation.asset_a
         target_b_value = current_value * allocation.asset_b
-        # target_cash = current_value * allocation.cash  # not used directly
 
-        # Calculate trades needed
         current_a_value = self.asset_a_qty * price.asset_a
         current_b_value = self.asset_b_qty * price.asset_b
 
@@ -96,7 +99,6 @@ class Portfolio:
 
         fees = (trade_a + trade_b) * fee_rate
 
-        # Apply new allocation (after fees)
         net_value = current_value - fees
         self.cash = net_value * allocation.cash
         self.asset_a_qty = (

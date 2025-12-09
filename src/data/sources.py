@@ -70,18 +70,23 @@ class CSVDataSource(BaseDataSource):
         self._prices: Optional[List[Price]] = None
 
     def _load(self) -> None:
-        """Lazy load data from CSV."""
+        """Lazy load data from CSV.
+
+        The method reads CSV into a pandas DataFrame, sets the 'epoch'
+        column as index if present, validates that required asset columns
+        are present, and converts rows into immutable Price objects.
+        """
         if self._data is None:
             if not self.file_path.exists():
                 raise FileNotFoundError(f"Data file not found: {self.file_path}")
 
             self._data = pd.read_csv(self.file_path)
 
-            # Try to set index
+            
             if 'epoch' in self._data.columns:
                 self._data.set_index('epoch', inplace=True)
 
-            # Validate columns
+            
             if self.asset_a_col not in self._data.columns:
                 raise ValueError(
                     "Column '{col}' not found in {file}".format(
@@ -95,7 +100,7 @@ class CSVDataSource(BaseDataSource):
                     )
                 )
 
-            # Convert to Price objects
+            
             self._prices = [
                 Price(
                     asset_a=row[self.asset_a_col],
@@ -161,7 +166,12 @@ class BinanceRESTSource(BaseDataSource):
         self._prices: Optional[List[Price]] = None
 
     def _fetch_klines(self, symbol: str) -> List[dict]:
-        """Fetch candlestick data from Binance."""
+        """Fetch candlestick data from Binance.
+
+        The function iteratively requests the maximum number of klines per
+        request (1000), sleeping briefly between calls to obey rate limits
+        and concatenating results until the requested date range is covered.
+        """
         end_time = int(datetime.now().timestamp() * 1000)
         now = datetime.now()
         start_time = int((now - timedelta(days=self.days)).timestamp() * 1000)
@@ -196,7 +206,6 @@ class BinanceRESTSource(BaseDataSource):
                     + self.INTERVALS.get(self.interval, 3600000)
                 )
 
-                # Rate limiting
                 time.sleep(0.1)
 
             except requests.RequestException as e:
@@ -205,15 +214,20 @@ class BinanceRESTSource(BaseDataSource):
         return all_klines
 
     def fetch_prices(self) -> List[Price]:
-        """Fetch historical prices for both symbols."""
+        """Fetch historical prices for both symbols and align them by timestamp.
+
+        The method fetches klines for both symbols, converts them to pandas
+        DataFrames, aligns them by the common timestamp using an inner join,
+        and returns a list of Price objects for the aligned timestamps.
+        """
         if self._prices is not None:
             return self._prices
 
-        # Fetch both symbols
+        
         klines_a = self._fetch_klines(self.symbol_a)
         klines_b = self._fetch_klines(self.symbol_b)
 
-        # Convert to DataFrames for alignment
+        
         df_a = pd.DataFrame(klines_a, columns=[
             'open_time', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_volume', 'trades',
@@ -225,7 +239,7 @@ class BinanceRESTSource(BaseDataSource):
             'taker_buy_base', 'taker_buy_quote', 'ignore'
         ])
 
-        # Use close prices, align by timestamp
+        
         df_a['timestamp'] = pd.to_datetime(df_a['open_time'], unit='ms')
         df_b['timestamp'] = pd.to_datetime(df_b['open_time'], unit='ms')
 
@@ -248,7 +262,11 @@ class BinanceRESTSource(BaseDataSource):
         return self._prices
 
     def get_current_price(self) -> Price:
-        """Get current spot price from Binance."""
+        """Get current spot price from Binance REST endpoints.
+
+        The method queries the ticker price endpoints for both symbols and
+        returns a Price value object with the current timestamp.
+        """
         try:
             resp_a = requests.get(
                 f"{self.BASE_URL}/ticker/price",
@@ -273,7 +291,11 @@ class BinanceRESTSource(BaseDataSource):
             raise ConnectionError("Failed to get current price") from e
 
     def save_to_csv(self, output_path: str) -> None:
-        """Save fetched data to CSV for offline use."""
+        """Save fetched historical prices to a CSV file for offline use.
+
+        The CSV includes the 'epoch' index and provides 'Asset A' and 'Asset B'
+        columns suitable for backtesting inputs.
+        """
         prices = self.fetch_prices()
 
         data = {

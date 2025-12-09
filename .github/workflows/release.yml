@@ -61,11 +61,26 @@ jobs:
           target: production
           platforms: linux/amd64,linux/arm64
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/${{ env.GHCR_REPO }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/${{ env.GHCR_REPO }}:buildcache,mode=max
           tags: |
             ghcr.io/${{ env.GHCR_REPO }}:latest
             ghcr.io/${{ env.GHCR_REPO }}:${{ github.ref_name }}
+
+      - name: 🏃 Run quick backtest in released image to generate artifact
+        run: |
+          mkdir -p outputs data
+          cat > data/ci_data.csv <<'CSV'
+          epoch,Asset A,Asset B,Cash
+          0,111329.99,4299.38,1.0
+          1,111259.99,4293.48,1.0
+          CSV
+          docker pull ghcr.io/${{ env.GHCR_REPO }}:latest
+          docker run --rm -v ${GITHUB_WORKSPACE}/outputs:/app/outputs -v ${GITHUB_WORKSPACE}/data:/app/data ghcr.io/${{ env.GHCR_REPO }}:latest backtest --data data/ci_data.csv --strategy safe_profit --output /app/outputs/ci_backtest
 
       - name: Create GitHub Release
         uses: actions/create-release@v1

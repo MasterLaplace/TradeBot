@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..core.models import BacktestResult
+import matplotlib.pyplot as plt
 
 
 # =============================================================================
@@ -107,14 +108,12 @@ class ChartGenerator:
     """
 
     def __init__(self):
-        # Lazy import matplotlib
-        self._plt = None
+        """Create a chart generator.
 
-    def _get_plt(self):
-        if self._plt is None:
-            import matplotlib.pyplot as plt
-            self._plt = plt
-        return self._plt
+        Matplotlib is imported at module level. The project uses a virtual
+        environment to guarantee optional dependencies are available when
+        needed.
+        """
 
     def plot_performance(
         self,
@@ -124,13 +123,12 @@ class ChartGenerator:
         output_path: Optional[str] = None,
     ) -> None:
         """Plot portfolio performance vs benchmarks."""
-        plt = self._get_plt()
 
         fig, ax = plt.subplots(figsize=(12, 6))
 
         epochs = range(len(result.portfolio_values))
 
-        # Normalize to 1.0
+
         norm_portfolio = [v / result.initial_capital for v in result.portfolio_values]
         ax.plot(epochs, norm_portfolio, label=f'Strategy ({result.strategy_name})',
                 linewidth=2, color='green')
@@ -167,7 +165,6 @@ class ChartGenerator:
         output_path: Optional[str] = None,
     ) -> None:
         """Plot allocation over time."""
-        plt = self._get_plt()
 
         fig, ax = plt.subplots(figsize=(12, 4))
 
@@ -206,13 +203,11 @@ class ChartGenerator:
         output_path: Optional[str] = None,
     ) -> None:
         """Plot drawdown chart."""
-        plt = self._get_plt()
 
         fig, ax = plt.subplots(figsize=(12, 3))
 
         epochs = range(len(result.portfolio_values))
 
-        # Calculate drawdown
         values = result.portfolio_values
         peak = values[0]
         drawdown = []

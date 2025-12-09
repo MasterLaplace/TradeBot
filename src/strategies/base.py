@@ -70,7 +70,12 @@ class BaseStrategy(ABC):
         pass
 
     def _normalize_allocation(self, weight_a: float, weight_b: float) -> Allocation:
-        """Normalize weights to valid allocation."""
+        """Normalize weights to valid allocation.
+
+        Ensures the allocation components are within [0, 1] and that they sum
+        to 1. If the sum exceeds 1.0, weights are scaled proportionally and
+        cash becomes zero. Re-normalization tolerates small rounding errors.
+        """
         total = weight_a + weight_b
 
         if total > 1.0:
@@ -80,12 +85,10 @@ class BaseStrategy(ABC):
         else:
             cash = 1.0 - total
 
-        # Ensure valid bounds
         weight_a = max(0.0, min(1.0, weight_a))
         weight_b = max(0.0, min(1.0, weight_b))
         cash = max(0.0, min(1.0, cash))
 
-        # Re-normalize if needed
         total = weight_a + weight_b + cash
         if total > 0:
             weight_a /= total
@@ -207,22 +210,31 @@ class CompositeStrategy(BaseStrategy):
     def _compute_weight(self, prices: List[float]) -> float:
         if len(prices) < self.long_window:
             return 0.25
+        weight = self._base_weight_from_sma(prices)
+        if self._is_exceeding_stoploss(prices):
+            return 0.05
+        return self._apply_volatility_scaling(weight, prices)
 
-        # Base weight from SMA
+    def _base_weight_from_sma(self, prices: List[float]) -> float:
+        """Base exposure according to SMA crossover.
+
+        Returns a conservative weight when SMA crossover signals are
+        bullish; otherwise returns a defensive weight.
+        """
         short_sma = TechnicalIndicators.sma(prices, self.short_window)
         long_sma = TechnicalIndicators.sma(prices, self.long_window)
-        weight = 0.7 if (short_sma and long_sma and short_sma > long_sma) else 0.3
+        return 0.7 if (short_sma and long_sma and short_sma > long_sma) else 0.3
 
-        # Apply stoploss
+    def _is_exceeding_stoploss(self, prices: List[float]) -> bool:
+        """Check whether recent drawdown exceeds the configured threshold."""
         drawdown = TechnicalIndicators.drawdown_from_peak(prices, self.long_window)
-        if drawdown > self.stop_threshold:
-            weight = 0.05
+        return drawdown > self.stop_threshold
 
-        # Volatility scaling
+    def _apply_volatility_scaling(self, weight: float, prices: List[float]) -> float:
+        """Scale down exposure when recent volatility is high."""
         vol = TechnicalIndicators.volatility(prices, self.vol_window)
         if vol > 0.025:
-            weight = min(weight, 0.2)
-
+            return min(weight, 0.2)
         return weight
 
 
@@ -255,36 +267,44 @@ class AdaptiveTrendStrategy(BaseStrategy):
     def _compute_weight(self, prices: List[float]) -> float:
         if len(prices) < self.lookback_long + 1:
             return self.neutral_exposure
-
-        # Calculate indicators
         sma_short = TechnicalIndicators.sma(prices, self.lookback_short)
         sma_long = TechnicalIndicators.sma(prices, self.lookback_long)
         momentum = TechnicalIndicators.momentum(prices, self.lookback_short)
         vol = TechnicalIndicators.volatility(prices, self.vol_window)
         drawdown = TechnicalIndicators.drawdown_from_peak(prices, self.lookback_long)
 
-        # Decision logic
-        # 1. Trailing stop
-        if drawdown > self.trailing_stop:
+        if self._is_trailing_stop(drawdown):
             return 0.02
 
-        # 2. High volatility filter
-        if vol > self.high_vol_threshold:
+        if self._is_high_volatility(vol):
             return min(self.neutral_exposure, self.bear_exposure + 0.1)
 
-        # 3. Trend detection
         if sma_short and sma_long:
             trend_strength = (sma_short - sma_long) / sma_long if sma_long > 0 else 0
 
-            if sma_short > sma_long and momentum > 0:
-                # Bullish
+            if self._is_bullish(sma_short, sma_long, momentum):
                 exposure = self.bull_exposure + min(0.2, trend_strength * 5)
                 return min(0.8, exposure)
-            elif sma_short < sma_long and momentum < 0:
-                # Bearish
+            if self._is_bearish(sma_short, sma_long, momentum):
                 return self.bear_exposure
 
         return self.neutral_exposure
+
+    def _is_trailing_stop(self, drawdown: float) -> bool:
+        """Check whether drawdown exceeds configured trailing stop."""
+        return drawdown > self.trailing_stop
+
+    def _is_high_volatility(self, vol: float) -> bool:
+        """Return True when volatility is above the configured threshold."""
+        return vol > self.high_vol_threshold
+
+    def _is_bullish(self, sma_short: float, sma_long: float, momentum: float) -> bool:
+        """Check bullish conditions combining SMA crossover and momentum."""
+        return sma_short > sma_long and momentum > 0
+
+    def _is_bearish(self, sma_short: float, sma_long: float, momentum: float) -> bool:
+        """Check bearish conditions combining SMA crossover and momentum."""
+        return sma_short < sma_long and momentum < 0
 
 
 class SafeProfitStrategy(BaseStrategy):
@@ -319,18 +339,29 @@ class SafeProfitStrategy(BaseStrategy):
     def _compute_weight(self, prices: List[float]) -> float:
         if len(prices) < 25:
             return 0.15  # Very conservative until enough data
+        w_trend, w_comp = self._weights_from_substrategies(prices)
+        return self._conservative_blend(w_trend, w_comp)
 
-        # Get weights from both strategies
-        w_trend = self._adaptive._compute_weight(prices)
-        w_comp = self._composite._compute_weight(prices)
+    def _weights_from_substrategies(self, prices: List[float]) -> tuple[float, float]:
+        """Return the weights computed by sub-strategies.
 
-        # Use conservative approach
+        Uses the underlying adaptive and composite strategies to obtain
+        their respective exposure suggestions.
+        """
+        return (
+            self._adaptive._compute_weight(prices),
+            self._composite._compute_weight(prices),
+        )
+
+    def _conservative_blend(self, w_trend: float, w_comp: float) -> float:
+        """Blend two strategy weights conservatively.
+
+        If both suggest strong exposure we allow more; otherwise we take
+        the minimum to avoid taking overlapping risks.
+        """
         if w_trend > 0.5 and w_comp > 0.5:
-            # Both bullish - allow more exposure
             return min(0.7, max(w_trend, w_comp))
-        else:
-            # Use minimum (safer)
-            return min(w_trend, w_comp)
+        return min(w_trend, w_comp)
 
 
 class StoplossStrategy(BaseStrategy):
@@ -386,24 +417,27 @@ class VolScaleStrategy(BaseStrategy):
         if len(prices) < self.vol_window + 1:
             return self.base_weight
 
-        # Compute recent volatility
         vol = TechnicalIndicators.volatility(prices, self.vol_window)
         if vol == 0:
             return self.base_weight
 
-        # Reference volatility (median of historical)
         all_returns = [
             (prices[i] / prices[i - 1] - 1.0) for i in range(1, len(prices))
         ]
-        ref_vol = (
-            statistics.median([abs(r) for r in all_returns]) if all_returns else vol
-        )
+        ref_vol = self._reference_volatility(all_returns, vol)
 
-        # Scale inversely with volatility
+        
         scale = ref_vol / vol if vol > 0 else 1.0
         weight = self.base_weight * scale
 
         return max(self.min_weight, min(self.max_weight, weight))
+
+    def _reference_volatility(self, returns: List[float], default: float) -> float:
+        """Compute the reference volatility used for scaling.
+
+        Uses the median of absolute returns as a robust baseline.
+        """
+        return statistics.median([abs(r) for r in returns]) if returns else default
 
 
 class BlendedStrategy(BaseStrategy):
@@ -427,7 +461,7 @@ class BlendedStrategy(BaseStrategy):
 
     def __init__(self, params: Optional[Dict[str, Any]] = None):
         super().__init__(params)
-        # Use default params if not provided
+        
         self.blend = self.params.get("blend", self.DEFAULT_PARAMS["blend"])
         self.short_window = self.params.get("short", self.DEFAULT_PARAMS["short"])
         self.long_window = self.params.get("long", self.DEFAULT_PARAMS["long"])
@@ -447,11 +481,18 @@ class BlendedStrategy(BaseStrategy):
         if len(prices) < 2:
             return 0.5
 
-        # Baseline: momentum
-        delta = prices[-1] - prices[-2]
-        baseline_w = 0.7 if delta > 0 else 0.3
+        baseline_w = self._baseline_weight(prices)
+        target = self._composite_target(prices)
+        weight = self.blend * baseline_w + (1.0 - self.blend) * target
+        return max(0.0, min(1.0, weight))
 
-        # Composite: SMA + stoploss + vol scaling
+    def _baseline_weight(self, prices: List[float]) -> float:
+        """Return baseline momentum-based weight (simple direction-based)."""
+        delta = prices[-1] - prices[-2]
+        return 0.7 if delta > 0 else 0.3
+
+    def _composite_target(self, prices: List[float]) -> float:
+        """Compute composite target weight using SMA, stoploss and vol scaling."""
         sma_short = TechnicalIndicators.sma(prices, self.short_window)
         sma_long = TechnicalIndicators.sma(prices, self.long_window)
 
@@ -460,31 +501,21 @@ class BlendedStrategy(BaseStrategy):
         else:
             target = 0.7 if sma_short > sma_long else 0.3
 
-        # Stoploss
         peak = max(prices)
         if peak > 0 and (peak - prices[-1]) / peak > self.threshold:
-            target = 0.0
+            return 0.0
 
-        # Volatility scaling
         if len(prices) >= self.vol_window + 1:
             vol = TechnicalIndicators.volatility(prices, self.vol_window)
-            all_returns = [
-                (prices[i] / prices[i - 1] - 1.0) for i in range(1, len(prices))
-            ]
-            ref_vol = (
-                statistics.median([abs(r) for r in all_returns])
-                if all_returns
-                else vol
-            )
+            all_returns = [(prices[i] / prices[i - 1] - 1.0) for i in range(1, len(prices))]
+            ref_vol = statistics.median([abs(r) for r in all_returns]) if all_returns else vol
 
             if vol > 0:
                 scale = ref_vol / vol
                 scaled_target = target * (1 + (scale - 1) * self.vol_multiplier)
-                target = max(0.0, min(1.0, scaled_target))
+                return max(0.0, min(1.0, scaled_target))
 
-        # Blend
-        weight = self.blend * baseline_w + (1.0 - self.blend) * target
-        return max(0.0, min(1.0, weight))
+        return target
 
 
 class BlendedTunedStrategy(BlendedStrategy):
@@ -502,7 +533,6 @@ class BlendedTunedStrategy(BlendedStrategy):
     }
 
     def __init__(self, params: Optional[Dict[str, Any]] = None):
-        # Override with tuned params
         super().__init__(self.DEFAULT_PARAMS)
 
     @property
@@ -590,7 +620,6 @@ class SMAStoplossStrategy(BaseStrategy):
         return "sma_stoploss"
 
     def _compute_weight(self, prices: List[float]) -> float:
-        # Get SMA target
         sma_short = TechnicalIndicators.sma(prices, self.short_window)
         sma_long = TechnicalIndicators.sma(prices, self.long_window)
 
@@ -599,7 +628,6 @@ class SMAStoplossStrategy(BaseStrategy):
         else:
             target = 0.7 if sma_short > sma_long else 0.3
 
-        # Apply stoploss
         if len(prices) >= 2:
             peak = max(prices)
             if peak > 0 and (peak - prices[-1]) / peak > self.threshold:
@@ -626,7 +654,6 @@ class SMAVolFilterStrategy(BaseStrategy):
         return "sma_volfilter"
 
     def _compute_weight(self, prices: List[float]) -> float:
-        # Get SMA target
         sma_short = TechnicalIndicators.sma(prices, self.short_window)
         sma_long = TechnicalIndicators.sma(prices, self.long_window)
 
@@ -635,7 +662,6 @@ class SMAVolFilterStrategy(BaseStrategy):
         else:
             target = 0.7 if sma_short > sma_long else 0.3
 
-        # Apply volatility filter
         vol = TechnicalIndicators.volatility(prices, self.vol_window)
         if vol > self.vol_threshold:
             return 0.3  # Reduce exposure
@@ -670,7 +696,6 @@ class SMASmoothStopStrategy(BaseStrategy):
         self._prev_weight = 0.5
 
     def _compute_weight(self, prices: List[float]) -> float:
-        # Get SMA target
         sma_short = TechnicalIndicators.sma(prices, self.short_window)
         sma_long = TechnicalIndicators.sma(prices, self.long_window)
 
@@ -679,21 +704,17 @@ class SMASmoothStopStrategy(BaseStrategy):
         else:
             target = 0.7 if sma_short > sma_long else 0.3
 
-        # Smoothing (exponential moving average of weight)
         weight = self._prev_weight + self.alpha * (target - self._prev_weight)
 
-        # Volatility scaling
         vol = TechnicalIndicators.volatility(prices, self.vol_window)
         if vol > self.vol_threshold:
             weight *= self.vol_scale_factor
 
-        # Partial stoploss
         if len(prices) >= 2:
             peak = max(prices)
             if peak > 0 and (peak - prices[-1]) / peak > self.stop_threshold:
                 weight = min(weight, self.stop_level)
 
-        # Clamp and save
         weight = max(0.0, min(1.0, weight))
         self._prev_weight = weight
 
@@ -719,27 +740,23 @@ class AdaptiveBaselineStrategy(BaseStrategy):
         return "adaptive_baseline"
 
     def _compute_weight(self, prices: List[float]) -> float:
-        # Baseline weight (momentum)
         if len(prices) < 2:
             base_weight = 0.5
         else:
             delta = prices[-1] - prices[-2]
             base_weight = 0.7 if delta > 0 else 0.3
 
-        # Volatility gate
         vol_gate = 1.0
         vol = TechnicalIndicators.volatility(prices, self.vol_window)
         if vol > self.vol_threshold:
             vol_gate = self.vol_scale_factor
 
-        # Stop gate
         stop_gate = 1.0
         if len(prices) >= 2:
             peak = max(prices)
             if peak > 0 and (peak - prices[-1]) / peak > self.stop_threshold:
                 stop_gate = self.stop_scale
 
-        # Apply gates
         risk_factor = vol_gate * stop_gate
         return max(0.0, min(1.0, base_weight * risk_factor))
 
@@ -750,8 +767,6 @@ class EnsembleStrategy(BaseStrategy):
 
     Uses top 5 candidates from Optuna optimization for robust predictions.
     """
-
-    # Top 5 candidates from Optuna robust optimization
     ENSEMBLE_CANDIDATES = [
         {
             "blend": 0.9996436412271156,
@@ -812,10 +827,8 @@ class EnsembleStrategy(BaseStrategy):
         if len(prices) < 2:
             return 0.5
 
-        # Get weight from each candidate
         weights = [s._compute_weight(prices) for s in self._strategies]
 
-        # Average
         return sum(weights) / len(weights)
 
 

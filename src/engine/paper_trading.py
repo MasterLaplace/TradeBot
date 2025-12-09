@@ -76,6 +76,7 @@ class PaperTradingEngine:
         fee_rate: float = 0.001,
         symbol_a: str = "BTCUSDT",
         symbol_b: str = "ETHUSDT",
+        price_provider: Optional[Callable[[], Price]] = None,
     ):
         self.strategy = strategy
         self.fee_rate = fee_rate
@@ -86,6 +87,7 @@ class PaperTradingEngine:
             portfolio=Portfolio(cash=initial_capital)
         )
         self._price_source = BinanceRESTSource(symbol_a, symbol_b)
+        self._price_provider = price_provider
         self._price_history: List[Price] = []
         self._epoch = 0
 
@@ -95,7 +97,7 @@ class PaperTradingEngine:
         portfolio = self.state.portfolio
         current_value = portfolio.value(price)
 
-        # Calculate target quantities
+        
         target_a_qty = (
             (current_value * allocation.asset_a) / price.asset_a
             if price.asset_a > 0
@@ -107,7 +109,7 @@ class PaperTradingEngine:
             else 0
         )
 
-        # Asset A trades
+        
         delta_a = target_a_qty - portfolio.asset_a_qty
         if abs(delta_a) > 1e-8:
             trade_value = abs(delta_a) * price.asset_a
@@ -122,7 +124,7 @@ class PaperTradingEngine:
                 fee=fee,
             ))
 
-        # Asset B trades
+        
         delta_b = target_b_qty - portfolio.asset_b_qty
         if abs(delta_b) > 1e-8:
             trade_value = abs(delta_b) * price.asset_b
@@ -137,10 +139,20 @@ class PaperTradingEngine:
                 fee=fee,
             ))
 
-        # Apply rebalance
+        
         portfolio.rebalance(allocation, price, self.fee_rate)
 
         return trades
+
+    def _get_current_price(self) -> Price:
+        """Obtain the current price from provider or the default REST source.
+
+        The helper centralizes error handling and allows the engine to
+        be easily tested by mocking this method.
+        """
+        if self._price_provider:
+            return self._price_provider()
+        return self._price_source.get_current_price()
 
     def tick(self) -> Dict:
         """
@@ -148,23 +160,23 @@ class PaperTradingEngine:
 
         Returns current state summary.
         """
-        # Get current price
+        
         try:
-            price = self._price_source.get_current_price()
+            price = self._get_current_price()
         except Exception as e:
             return {'error': str(e)}
 
         self._price_history.append(price)
 
-        # Get strategy decision
+        
         allocation = self.strategy.decide(self._epoch, self._price_history)
         self.state.current_allocation = allocation
 
-        # Execute rebalance
+        
         trades = self._execute_rebalance(allocation, price)
         self.state.trades.extend(trades)
 
-        # Record portfolio value
+        
         current_value = self.state.portfolio.value(price)
         self.state.portfolio_history.append(current_value)
 
@@ -268,7 +280,7 @@ class DashboardDisplay:
 
     def display(self, tick_result: Dict) -> None:
         """Print dashboard to terminal (clears screen first)."""
-        # Clear screen
+        
         print("\033[H\033[J", end="")
         print(self.render(tick_result))
         print("\nPress Ctrl+C to stop")
