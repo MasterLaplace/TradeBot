@@ -32,6 +32,7 @@ Commands:
   remove SYMBOL         remove a stock from the watchlist
   list                  show the watchlist
   analyze SYMBOL [days] one-shot analysis + signal (default 90 days)
+  search NAME           find a ticker by company name (e.g. search SK Hynix)
   scan                  scan the market for opportunities now
   buy SYMBOL QTY PRICE  record a REAL buy (your Trade Republic order)
   sell SYMBOL QTY PRICE record a REAL sell
@@ -155,6 +156,21 @@ class Console:
         self.engine.journal.log_signal(signal)
         from .data.quotes import get_company_name
         print(self.engine.format_signal(signal, company=get_company_name(sym)))
+
+    async def _cmd_search(self, args):
+        if not args:
+            print("Usage: search COMPANY NAME")
+            return
+        from .data.quotes import search_symbols
+        query = " ".join(args)
+        results = search_symbols(query)
+        if not results:
+            print(f"No ticker found for '{query}'.")
+            return
+        print(f"Results for '{query}' (use the symbol with add/analyze/buy):")
+        for r in results:
+            name = r["name"] or "?"
+            print(f"  {r['symbol']:14} {name:32} {r['exchange']}")
 
     async def _cmd_scan(self, args):
         print("Scanning market...")

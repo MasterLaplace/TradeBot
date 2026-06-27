@@ -48,6 +48,28 @@ def quote_url(symbol: str) -> str:
     return f"https://finance.yahoo.com/quote/{symbol.upper()}"
 
 
+def search_symbols(query: str, limit: int = 8) -> list:
+    """Search tickers by company name. Returns [{symbol, name, exchange}, ...]."""
+    out = []
+    try:
+        import yfinance as yf
+
+        results = yf.Search(query, max_results=limit)
+        for q in results.quotes:
+            sym = q.get("symbol")
+            if not sym:
+                continue
+            name = (q.get("shortname") or q.get("longname") or "").strip()
+            out.append({
+                "symbol": sym,
+                "name": name,
+                "exchange": q.get("exchDisp") or q.get("exchange") or "",
+            })
+    except Exception as e:
+        logger.warning(f"Symbol search failed for '{query}': {e}")
+    return out
+
+
 def _base_currency() -> str:
     from ..config import get_settings
     return get_settings().base_currency.upper()

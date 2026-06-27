@@ -63,6 +63,7 @@ tradebot> quit
 |---|---|
 | `add / remove / list` | manage the watchlist |
 | `analyze SYMBOL [days]` | one-shot analysis + signal |
+| `search NAME` | find a ticker by company name |
 | `scan` | scan the market for opportunities |
 | `buy / sell SYMBOL QTY PRICE` | record a **real** position |
 | `portfolio` / `sim` | real / simulated portfolio with live P&L |
