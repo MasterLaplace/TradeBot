@@ -63,6 +63,10 @@ class Settings(BaseSettings):
         default=300, description="Seconds between analysis cycles (in-window)"
     )
     data_dir: str = Field(default="data", description="Local state directory")
+    base_currency: str = Field(
+        default="EUR",
+        description="Currency all portfolio valuations are normalized to",
+    )
 
     # -------------------------------------------------------------------------
     # Active window (energy sobriety — SPEC.md §5b)
@@ -96,6 +100,12 @@ class Settings(BaseSettings):
     @property
     def active_weekday_set(self) -> set:
         return {int(d) for d in self.active_weekdays.split(",") if d.strip() != ""}
+
+    @property
+    def currency_symbol(self) -> str:
+        return {
+            "EUR": "€", "USD": "$", "GBP": "£", "KRW": "₩", "JPY": "¥",
+        }.get(self.base_currency.upper(), self.base_currency.upper() + " ")
 
     @property
     def has_finnhub(self) -> bool:

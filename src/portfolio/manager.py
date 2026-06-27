@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from ..core.models import Position, Portfolio
+from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class PortfolioManager:
         # The real portfolio only records positions bought with external money,
         # so it does not model a cash balance (track_cash=False).
         self.track_cash = track_cash
+        self.cur = get_settings().currency_symbol
         self.portfolio = self._load()
 
     def _load(self) -> Portfolio:
@@ -207,15 +209,16 @@ class PortfolioManager:
     def get_valued_summary(self, prices: Dict[str, float]) -> str:
         """Human-readable summary including live P&L."""
         mtm = self.mark_to_market(prices)
+        c = self.cur
         lines = [f"💼 *{self.label} (live)*"]
         if mtm["track_cash"]:
-            lines.append(f"💵 Cash: `${mtm['cash']:,.2f}`")
+            lines.append(f"💵 Cash: `{c}{mtm['cash']:,.2f}`")
         else:
-            lines.append(f"💵 Invested: `${mtm['cost_basis']:,.2f}`")
+            lines.append(f"💵 Invested: `{c}{mtm['cost_basis']:,.2f}`")
         lines += [
-            f"📦 Holdings: `${mtm['holdings_value']:,.2f}`",
-            f"💰 Total: `${mtm['total']:,.2f}`",
-            f"📈 Unrealized P&L: `${mtm['unrealized_pnl']:+,.2f}`",
+            f"📦 Holdings: `{c}{mtm['holdings_value']:,.2f}`",
+            f"💰 Total: `{c}{mtm['total']:,.2f}`",
+            f"📈 Unrealized P&L: `{c}{mtm['unrealized_pnl']:+,.2f}`",
             "",
         ]
         if not mtm["positions"]:
@@ -224,7 +227,7 @@ class PortfolioManager:
         lines.append("*Positions:*")
         for sym, p in mtm["positions"].items():
             lines.append(
-                f"• {sym}: {p['quantity']} @ ${p['entry']:.2f} → ${p['price']:.2f} "
+                f"• {sym}: {p['quantity']} @ {c}{p['entry']:.2f} → {c}{p['price']:.2f} "
                 f"({p['pnl']:+.2f}, {p['pnl_pct']:+.1f}%)"
             )
         return "\n".join(lines)
@@ -233,7 +236,7 @@ class PortfolioManager:
         """Get a human-readable summary of the portfolio."""
         lines = [
             f"💼 *{self.label} Summary*",
-            f"💵 Cash: `${self.portfolio.cash:,.2f}`",
+            f"💵 Cash: `{self.cur}{self.portfolio.cash:,.2f}`",
             ""
         ]
         
@@ -244,7 +247,7 @@ class PortfolioManager:
         lines.append("*Open Positions:*")
         for sym, pos in self.portfolio.positions.items():
             lines.append(
-                f"• {sym}: {pos.quantity} shares @ ${pos.average_entry_price:,.2f}"
+                f"• {sym}: {pos.quantity} shares @ {self.cur}{pos.average_entry_price:,.2f}"
             )
             
         return "\n".join(lines)

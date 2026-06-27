@@ -164,7 +164,7 @@ class TradeBotEngine:
             if self.sim.add_position(symbol, qty, price):
                 reason = f"conf={signal.confidence:.0%}, composite={signal.composite_score:+.2f}"
                 self.journal.log_trade("BUY", symbol, qty, price, reason)
-                return f"🟢 SIM BUY {qty:.4f} {symbol} @ ${price:.2f} ({reason})"
+                return f"🟢 SIM BUY {qty:.4f} {symbol} @ {self.settings.currency_symbol}{price:.2f} ({reason})"
 
         elif signal.direction == SignalDirection.SELL and signal.confidence >= s.sim_sell_confidence:
             if not held:
@@ -172,9 +172,9 @@ class TradeBotEngine:
             qty = held.quantity
             if self.sim.remove_position(symbol, qty, price):
                 pnl = (price - held.average_entry_price) * qty
-                reason = f"conf={signal.confidence:.0%}, P&L=${pnl:+.2f}"
+                reason = f"conf={signal.confidence:.0%}, P&L={self.settings.currency_symbol}{pnl:+.2f}"
                 self.journal.log_trade("SELL", symbol, qty, price, reason)
-                return f"🔴 SIM SELL {qty:.4f} {symbol} @ ${price:.2f} ({reason})"
+                return f"🔴 SIM SELL {qty:.4f} {symbol} @ {self.settings.currency_symbol}{price:.2f} ({reason})"
         return None
 
     def snapshot_sim_equity(self) -> dict:

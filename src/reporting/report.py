@@ -10,33 +10,38 @@ from typing import List
 from ..engine import TradeBotEngine
 
 
-def _trade_lines(trades: List[dict]) -> List[str]:
+def _cur(engine: TradeBotEngine) -> str:
+    return engine.settings.currency_symbol
+
+
+def _trade_lines(trades: List[dict], c: str) -> List[str]:
     lines = []
     for t in trades:
         sign = "🟢" if "BUY" in t.get("action", "") else "🔴"
         lines.append(
             f"  {sign} {t['action']} {t['quantity']} {t['symbol']} "
-            f"@ ${t['price']:.2f}  ({t.get('reason', '')})"
+            f"@ {c}{t['price']:.2f}  ({t.get('reason', '')})"
         )
     return lines
 
 
 def _portfolio_block(engine: TradeBotEngine, pm) -> List[str]:
+    c = _cur(engine)
     held = pm.held_symbols()
     prices = engine.live_prices(held)
     mtm = pm.mark_to_market(prices)
     if mtm["track_cash"]:
-        head = (f"{pm.label}: total ${mtm['total']:,.2f} "
-                f"(cash ${mtm['cash']:,.2f} + holdings ${mtm['holdings_value']:,.2f}), "
-                f"unrealized P&L ${mtm['unrealized_pnl']:+,.2f}")
+        head = (f"{pm.label}: total {c}{mtm['total']:,.2f} "
+                f"(cash {c}{mtm['cash']:,.2f} + holdings {c}{mtm['holdings_value']:,.2f}), "
+                f"unrealized P&L {c}{mtm['unrealized_pnl']:+,.2f}")
     else:
-        head = (f"{pm.label}: holdings ${mtm['holdings_value']:,.2f} "
-                f"(invested ${mtm['cost_basis']:,.2f}), "
-                f"unrealized P&L ${mtm['unrealized_pnl']:+,.2f}")
+        head = (f"{pm.label}: holdings {c}{mtm['holdings_value']:,.2f} "
+                f"(invested {c}{mtm['cost_basis']:,.2f}), "
+                f"unrealized P&L {c}{mtm['unrealized_pnl']:+,.2f}")
     lines = [head]
     for sym, p in mtm["positions"].items():
         lines.append(
-            f"  • {sym}: {p['quantity']} @ ${p['entry']:.2f} → ${p['price']:.2f} "
+            f"  • {sym}: {p['quantity']} @ {c}{p['entry']:.2f} → {c}{p['price']:.2f} "
             f"({p['pnl']:+.2f}, {p['pnl_pct']:+.1f}%)"
         )
     return lines
@@ -48,6 +53,7 @@ def build_report(engine: TradeBotEngine, last_n: int = 30) -> str:
     trades = [e for e in events if e.get("type") == "trade"]
     signals = [e for e in events if e.get("type") == "signal"]
 
+    c = _cur(engine)
     lines = ["📋 TradeBot report", ""]
     lines += _portfolio_block(engine, engine.real)
     lines.append("")
@@ -56,7 +62,7 @@ def build_report(engine: TradeBotEngine, last_n: int = 30) -> str:
 
     if trades:
         lines.append(f"Recent trades ({len(trades)}):")
-        lines += _trade_lines(trades)
+        lines += _trade_lines(trades, c)
         lines.append("")
 
     actionable = [s for s in signals if s.get("direction") in ("BUY", "SELL")]
@@ -78,6 +84,7 @@ def build_weekly_newsletter(engine: TradeBotEngine) -> str:
     signals = [e for e in events if e.get("type") == "signal"]
     equity = [e for e in events if e.get("type") == "equity"]
 
+    c = _cur(engine)
     lines = ["📰 **TradeBot — weekly newsletter**", ""]
 
     # Simulated portfolio performance over the week
@@ -86,7 +93,7 @@ def build_weekly_newsletter(engine: TradeBotEngine) -> str:
         delta = end["total"] - start["total"]
         pct = (delta / start["total"] * 100) if start["total"] else 0.0
         lines.append(
-            f"Simulated equity: ${start['total']:,.2f} → ${end['total']:,.2f} "
+            f"Simulated equity: {c}{start['total']:,.2f} → {c}{end['total']:,.2f} "
             f"({delta:+,.2f}, {pct:+.2f}%)"
         )
     lines += _portfolio_block(engine, engine.real)
@@ -96,7 +103,7 @@ def build_weekly_newsletter(engine: TradeBotEngine) -> str:
     sells = [t for t in trades if "SELL" in t.get("action", "")]
     lines.append(f"Trades this week: {len(buys)} buys, {len(sells)} sells.")
     if trades:
-        lines += _trade_lines(trades)
+        lines += _trade_lines(trades, c)
     lines.append("")
 
     actionable = [s for s in signals if s.get("direction") in ("BUY", "SELL")]
