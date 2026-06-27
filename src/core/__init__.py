@@ -11,11 +11,16 @@ from .models import (
     StrategyType,
     DataSourceType,
     Command,
+    SignalDirection,
+    NewsArticle,
+    SentimentReport,
+    ChartPattern,
+    TradingSignal,
 )
 
 __all__ = [
     "Price",
-    "Allocation", 
+    "Allocation",
     "Portfolio",
     "BacktestResult",
     "Strategy",
@@ -24,4 +29,9 @@ __all__ = [
     "StrategyType",
     "DataSourceType",
     "Command",
+    "SignalDirection",
+    "NewsArticle",
+    "SentimentReport",
+    "ChartPattern",
+    "TradingSignal",
 ]

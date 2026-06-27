@@ -10,5 +10,5 @@ This package provides a unified interface for:
 - Reporting
 """
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 __author__ = "MasterLaplace"

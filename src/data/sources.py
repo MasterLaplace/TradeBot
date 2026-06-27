@@ -331,3 +331,25 @@ class DataSourceFactory:
     ) -> BinanceRESTSource:
         """Create Binance REST data source."""
         return BinanceRESTSource(symbol_a, symbol_b, interval, days)
+
+    @staticmethod
+    def from_finnhub(
+        symbol: str,
+        api_key: str,
+        resolution: str = "D",
+        days: int = 90,
+        symbol_b: Optional[str] = None,
+    ):
+        """Create Finnhub REST data source for equities/ETFs.
+
+        Requires a Finnhub API key (free tier: 30 req/s).
+        """
+        from .finnhub_source import FinnhubRESTSource
+
+        return FinnhubRESTSource(
+            symbol=symbol,
+            api_key=api_key,
+            resolution=resolution,
+            days=days,
+            symbol_b=symbol_b,
+        )

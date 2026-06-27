@@ -60,14 +60,34 @@ class Allocation:
 
 
 @dataclass
+class Position:
+    """A specific asset position held in the portfolio."""
+    symbol: str
+    quantity: float
+    average_entry_price: float
+    last_updated: datetime
+
+    @property
+    def value(self) -> float:
+        """Current value assuming entry price (updated dynamically in runner)."""
+        return self.quantity * self.average_entry_price
+
+
+@dataclass
 class Portfolio:
     """Mutable portfolio state."""
     cash: float
+    positions: Dict[str, Position] = field(default_factory=dict)
+    
+    # Legacy compat (will be phased out for multi-asset positions)
     asset_a_qty: float = 0.0
     asset_b_qty: float = 0.0
 
+    def get_position(self, symbol: str) -> Optional[Position]:
+        return self.positions.get(symbol.upper())
+
     def value(self, price: Price) -> float:
-        """Calculate total portfolio value."""
+        """Calculate total portfolio value (legacy compat)."""
         return (
             self.cash +
             self.asset_a_qty * price.asset_a +
@@ -186,6 +206,7 @@ class StrategyType(Enum):
     BLENDED = auto()
     BLENDED_ROBUST = auto()
     BLENDED_ENSEMBLE = auto()
+    CHART_PATTERN = auto()
 
 
 class DataSourceType(Enum):
@@ -193,6 +214,8 @@ class DataSourceType(Enum):
     CSV = auto()
     BINANCE_REST = auto()
     BINANCE_WS = auto()
+    FINNHUB_REST = auto()
+    FINNHUB_WS = auto()
 
 
 class Command(Enum):
@@ -204,3 +227,106 @@ class Command(Enum):
     OPTIMIZE = "optimize"
     COMPARE = "compare"
     REPORT = "report"
+    MONITOR = "monitor"
+    ANALYZE = "analyze"
+
+
+class SignalDirection(Enum):
+    """Trading signal direction."""
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"
+
+
+# =============================================================================
+# NEW DOMAIN MODELS (Quantitative Suite)
+# =============================================================================
+
+@dataclass(frozen=True)
+class NewsArticle:
+    """Immutable news article value object."""
+    title: str
+    summary: str
+    source: str
+    url: str
+    timestamp: datetime
+    related_symbols: List[str] = field(default_factory=list)
+
+    @property
+    def age_seconds(self) -> float:
+        """Time elapsed since article publication."""
+        return (datetime.now() - self.timestamp).total_seconds()
+
+
+@dataclass(frozen=True)
+class SentimentReport:
+    """Result of AI-powered sentiment analysis on a news article."""
+    company_name: str
+    ticker: str
+    key_indicators: List[str]
+    identified_risks: List[str]
+    sentiment_polarity: float  # -1.0 (bearish) to +1.0 (bullish)
+    confidence: float  # 0.0 to 1.0
+    portfolio_advice: str = "No advice"
+    source_url: str = ""
+    analyzed_at: Optional[datetime] = None
+
+    def __post_init__(self):
+        if not (-1.0 <= self.sentiment_polarity <= 1.0):
+            raise ValueError(
+                f"Sentiment polarity must be in [-1.0, 1.0], got {self.sentiment_polarity}"
+            )
+        if not (0.0 <= self.confidence <= 1.0):
+            raise ValueError(
+                f"Confidence must be in [0.0, 1.0], got {self.confidence}"
+            )
+
+    @property
+    def is_bullish(self) -> bool:
+        return self.sentiment_polarity > 0.2
+
+    @property
+    def is_bearish(self) -> bool:
+        return self.sentiment_polarity < -0.2
+
+
+@dataclass(frozen=True)
+class ChartPattern:
+    """Detected chart pattern (from math PIPs or YOLOv8 vision)."""
+    pattern_name: str  # e.g. "W_Bottom", "Head and shoulders top"
+    confidence: float  # 0.0 to 1.0
+    direction: SignalDirection  # Expected price direction
+    detection_method: str  # "math_pips" or "yolov8"
+    symbol: str = ""
+    timestamp: Optional[datetime] = None
+    metadata: Dict = field(default_factory=dict)  # Bounding box, pivot points, etc.
+
+
+@dataclass
+class TradingSignal:
+    """Consolidated trading signal combining technical, pattern, and sentiment analysis."""
+    symbol: str
+    direction: SignalDirection
+    confidence: float  # 0.0 to 1.0
+    timestamp: datetime
+
+    # Component scores
+    technical_score: float = 0.0  # -1.0 to 1.0
+    pattern_score: float = 0.0  # -1.0 to 1.0
+    sentiment_score: float = 0.0  # -1.0 to 1.0
+
+    # Supporting data
+    patterns_detected: List[ChartPattern] = field(default_factory=list)
+    sentiment_reports: List[SentimentReport] = field(default_factory=list)
+    reasoning: str = ""
+
+    @property
+    def composite_score(self) -> float:
+        """Weighted composite score from all signal sources."""
+        weights = {"technical": 0.4, "pattern": 0.35, "sentiment": 0.25}
+        return (
+            weights["technical"] * self.technical_score
+            + weights["pattern"] * self.pattern_score
+            + weights["sentiment"] * self.sentiment_score
+        )
+
