@@ -234,9 +234,37 @@ class TradeBotEngine:
         )
 
     async def notify(self, message: str) -> None:
-        """Best-effort notification via the configured notifier."""
+        """Best-effort plain-text notification via the configured notifier."""
         if self.notifier:
             try:
                 await self.notifier.send_message(message)
             except Exception as e:
                 logger.warning(f"Notification failed: {e}")
+
+    async def notify_signal(self, signal: TradingSignal) -> None:
+        """Send a signal as a rich Discord embed, or formatted text otherwise."""
+        if not self.notifier:
+            return
+        try:
+            if hasattr(self.notifier, "send_embed"):
+                from .reporting.discord import build_signal_embed
+                price = self.live_prices([signal.symbol]).get(signal.symbol)
+                embed = build_signal_embed(signal, price, self.settings.currency_symbol)
+                await self.notifier.send_embed(embed)
+            else:
+                await self.notifier.send_message(self.format_signal(signal))
+        except Exception as e:
+            logger.warning(f"Signal notification failed: {e}")
+
+    async def notify_report(self, title: str, body: str) -> None:
+        """Send a report/newsletter as a Discord embed, or plain text otherwise."""
+        if not self.notifier:
+            return
+        try:
+            if hasattr(self.notifier, "send_embed"):
+                from .reporting.discord import build_text_embed
+                await self.notifier.send_embed(build_text_embed(title, body))
+            else:
+                await self.notifier.send_message(f"{title}\n\n{body}")
+        except Exception as e:
+            logger.warning(f"Report notification failed: {e}")

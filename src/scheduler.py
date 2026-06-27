@@ -109,7 +109,7 @@ class Scheduler:
 
                 if (signal.direction != SignalDirection.HOLD
                         and signal.confidence >= _ALERT_MIN_CONFIDENCE):
-                    await eng.notify("📣 " + eng.format_signal(signal))
+                    await eng.notify_signal(signal)
             except Exception as e:
                 logger.error(f"Error analyzing {symbol}: {e}")
 
@@ -124,7 +124,9 @@ class Scheduler:
                 self._last_newsletter = now
                 return
             try:
-                await self.engine.notify(build_weekly_newsletter(self.engine))
+                await self.engine.notify_report(
+                    "📰 Newsletter hebdomadaire", build_weekly_newsletter(self.engine)
+                )
                 self._last_newsletter = now
             except Exception as e:
                 logger.warning(f"Newsletter failed: {e}")

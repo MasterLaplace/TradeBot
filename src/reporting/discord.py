@@ -9,6 +9,7 @@ Gracefully degrades: if no webhook is configured, sends are no-ops.
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 import aiohttp
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Discord hard-limits a single message to 2000 characters.
 _MAX_LEN = 1990
+
+# Embed colors (decimal RGB).
+_COLOR_BUY = 3066993    # green
+_COLOR_SELL = 15158332  # red
+_COLOR_HOLD = 9807270   # grey
+_COLOR_INFO = 3447003   # blue
 
 
 class DiscordNotifier:
@@ -30,30 +37,39 @@ class DiscordNotifier:
     def enabled(self) -> bool:
         return self.webhook_url.startswith("https://")
 
+    async def send_embed(self, embed: dict) -> bool:
+        """Post a single rich embed."""
+        return await self._post({"username": self.username, "embeds": [embed]})
+
     async def send_message(self, content: str) -> bool:
         """Post a message. Long messages are split into chunks."""
         if not self.enabled:
             logger.debug("Discord webhook not configured — skipping send.")
             return False
-
-        chunks = self._split(content)
         ok = True
+        for chunk in self._split(content):
+            ok = await self._post({"username": self.username, "content": chunk}) and ok
+        return ok
+
+    async def _post(self, payload: dict) -> bool:
+        """POST a payload to the webhook. Returns True on success."""
+        if not self.enabled:
+            logger.debug("Discord webhook not configured — skipping send.")
+            return False
         try:
             async with aiohttp.ClientSession() as session:
-                for chunk in chunks:
-                    payload = {"username": self.username, "content": chunk}
-                    async with session.post(
-                        self.webhook_url, json=payload,
-                        timeout=aiohttp.ClientTimeout(total=15),
-                    ) as resp:
-                        if resp.status not in (200, 204):
-                            body = await resp.text()
-                            logger.warning(f"Discord webhook returned {resp.status}: {body}")
-                            ok = False
+                async with session.post(
+                    self.webhook_url, json=payload,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status not in (200, 204):
+                        body = await resp.text()
+                        logger.warning(f"Discord webhook returned {resp.status}: {body}")
+                        return False
         except Exception as e:
             logger.warning(f"Discord send failed: {e}")
             return False
-        return ok
+        return True
 
     @staticmethod
     def _split(content: str) -> list:
@@ -69,3 +85,48 @@ class DiscordNotifier:
         if current:
             chunks.append(current)
         return chunks
+
+
+# =============================================================================
+# EMBED BUILDERS
+# =============================================================================
+
+def build_signal_embed(signal, price: Optional[float] = None, currency: str = "€") -> dict:
+    """Build a rich Discord embed for a trading signal."""
+    direction = signal.direction.value
+    emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⏸️"}.get(direction, "❓")
+    action = {"BUY": "ACHAT", "SELL": "VENTE", "HOLD": "CONSERVER"}.get(direction, direction)
+    color = {"BUY": _COLOR_BUY, "SELL": _COLOR_SELL}.get(direction, _COLOR_HOLD)
+
+    fields = [
+        {"name": "🎯 Confiance", "value": f"{signal.confidence:.0%}", "inline": True},
+        {"name": "⚖️ Score", "value": f"{signal.composite_score:+.2f}", "inline": True},
+    ]
+    if price is not None:
+        fields.append({"name": "💰 Prix", "value": f"{currency}{price:,.2f}", "inline": True})
+    fields += [
+        {"name": "📈 Technique", "value": f"{signal.technical_score:+.2f}", "inline": True},
+        {"name": "📐 Figures", "value": f"{signal.pattern_score:+.2f}", "inline": True},
+        {"name": "🧠 Sentiment", "value": f"{signal.sentiment_score:+.2f}", "inline": True},
+    ]
+
+    embed = {
+        "title": f"{emoji} Signal {action} — {signal.symbol}",
+        "color": color,
+        "fields": fields,
+        "footer": {"text": f"TradeBot • {datetime.now().strftime('%d/%m/%Y %H:%M')}"},
+        "timestamp": datetime.now().astimezone().isoformat(),
+    }
+    if signal.reasoning:
+        embed["description"] = signal.reasoning[:4000]
+    return embed
+
+
+def build_text_embed(title: str, body: str, color: int = _COLOR_INFO) -> dict:
+    """Build a simple embed with a markdown body (e.g. report, newsletter)."""
+    return {
+        "title": title,
+        "description": body[:4000],
+        "color": color,
+        "footer": {"text": f"TradeBot • {datetime.now().strftime('%d/%m/%Y %H:%M')}"},
+    }
