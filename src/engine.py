@@ -30,6 +30,7 @@ from .analysis.scanner import MarketScanner
 from .portfolio.manager import PortfolioManager
 from .portfolio.journal import TradeJournal
 from .portfolio.watchlist import Watchlist
+from .portfolio.users import UserRegistry
 from .market.schedule import MarketSchedule
 
 logger = logging.getLogger(__name__)
@@ -40,9 +41,8 @@ class TradeBotEngine:
 
     def __init__(self, notifier=None):
         self.settings = get_settings()
-        data_dir = self.settings.data_dir
 
-        # Analysis pipeline
+        # Analysis pipeline (stateless — shared across users)
         self._tech = AdvancedTechnicalAnalyzer()
         self._patterns = PatternDetector(use_vision=False)  # math-only (SPEC §6)
         self._sentiment = OllamaSentimentAnalyzer(
@@ -55,22 +55,36 @@ class TradeBotEngine:
             api_key=self.settings.finnhub_api_key if self.settings.has_finnhub else ""
         )
 
-        # State
-        self.watchlist = Watchlist(data_dir, seed=self.settings.watchlist_symbols)
+        self.schedule = MarketSchedule(self.settings)
+        self.notifier = notifier  # Discord/Telegram — optional, injected
+
+        # Per-user state (watchlist + dual portfolios + journal)
+        self.users = UserRegistry(self.settings.data_dir)
+        self.user = self.users.current()
+        self._load_user_state()
+
+    def _load_user_state(self) -> None:
+        """(Re)build the per-user state for the current user."""
+        user_dir = self.users.dir_for(self.user)
+        self.watchlist = Watchlist(user_dir, seed=self.settings.watchlist_symbols)
         self.real = PortfolioManager(
-            data_dir, "portfolio_real.json",
+            user_dir, "portfolio_real.json",
             starting_cash=self.settings.real_starting_cash, label="Real portfolio",
             track_cash=False,  # records hand-entered positions, not a cash balance
         )
         self.sim = PortfolioManager(
-            data_dir, "portfolio_sim.json",
+            user_dir, "portfolio_sim.json",
             starting_cash=self.settings.sim_starting_cash, label="Simulated portfolio",
         )
-        self.journal = TradeJournal()
-        self.schedule = MarketSchedule(self.settings)
+        self.journal = TradeJournal(user_dir)
 
-        # Notifications (Discord/Telegram) — optional, injected
-        self.notifier = notifier
+    def set_user(self, name: str) -> bool:
+        """Switch the active user and reload their state. False if unknown."""
+        if not self.users.switch(name):
+            return False
+        self.user = name
+        self._load_user_state()
+        return True
 
     # ====================================================================
     # ANALYSIS
@@ -249,7 +263,9 @@ class TradeBotEngine:
             if hasattr(self.notifier, "send_embed"):
                 from .reporting.discord import build_signal_embed
                 price = self.live_prices([signal.symbol]).get(signal.symbol)
-                embed = build_signal_embed(signal, price, self.settings.currency_symbol)
+                embed = build_signal_embed(
+                    signal, price, self.settings.currency_symbol, user=self.user
+                )
                 await self.notifier.send_embed(embed)
             else:
                 await self.notifier.send_message(self.format_signal(signal))
@@ -263,7 +279,7 @@ class TradeBotEngine:
         try:
             if hasattr(self.notifier, "send_embed"):
                 from .reporting.discord import build_text_embed
-                await self.notifier.send_embed(build_text_embed(title, body))
+                await self.notifier.send_embed(build_text_embed(title, body, user=self.user))
             else:
                 await self.notifier.send_message(f"{title}\n\n{body}")
         except Exception as e:

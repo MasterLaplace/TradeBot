@@ -97,5 +97,7 @@ data/portfolio_real.json
 data/portfolio_sim.json
 data/watchlist.json
 data/journal.jsonl
+data/users.json
+data/users/
 *_analysis*.txt
 output.txt

@@ -67,9 +67,23 @@ tradebot> quit
 | `buy / sell SYMBOL QTY PRICE` | record a **real** position |
 | `portfolio` / `sim` | real / simulated portfolio with live P&L |
 | `report [n]` | recent journal activity |
-| `status` | market window + background tasks |
+| `status` | market window + background tasks + active user |
+| `user [list/add/switch/remove]` | manage users (separate portfolios) |
+| `users` | list users |
 | `start` / `stop` | background surveillance |
 | `quit` | exit cleanly |
+
+### Multiple users
+
+Several people (e.g. a family) can share one instance. Each user has their own
+real & simulated portfolios, watchlist and journal under `data/users/<name>/`,
+and their name appears in Discord notifications:
+
+```
+tradebot[default]> user add maman
+tradebot[default]> user switch maman
+tradebot[maman]> buy ASML 0.2 900
+```
 
 ## Configuration
 

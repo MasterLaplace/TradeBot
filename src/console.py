@@ -38,7 +38,12 @@ Commands:
   portfolio             real portfolio + live P&L
   sim                   simulated portfolio (bot-managed) + live P&L
   report [n]            summary of recent journal activity (default 30)
-  status                market window, background tasks
+  status                market window, background tasks, current user
+  user                  show the active user
+  user list             list all users
+  user add NAME         create a new user (own portfolios/watchlist)
+  user switch NAME      switch the active user
+  user remove NAME      remove a user (keeps their files)
   start | stop          start/stop background surveillance
   quit                  exit cleanly
 """
@@ -70,12 +75,16 @@ class Console:
         print(f"\n{self.engine.schedule.status_line()}")
         notif = ("Discord" if self.settings.has_discord
                  else "Telegram" if self.settings.has_telegram else "console only")
-        print(f"Notifications: {notif}\n")
+        print(f"Notifications: {notif}")
+        print(f"Active user: {self.engine.user} "
+              f"({len(self.engine.users.users())} user(s) — type 'users')\n")
 
         loop = asyncio.get_event_loop()
         while self._running:
             try:
-                line = await loop.run_in_executor(None, input, "tradebot> ")
+                line = await loop.run_in_executor(
+                    None, input, f"tradebot[{self.engine.user}]> "
+                )
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
@@ -195,7 +204,36 @@ class Console:
     async def _cmd_status(self, args):
         print(self.engine.schedule.status_line())
         print(f"Background surveillance: {'🟢 running' if self.scheduler.running else '🔴 stopped'}")
-        print(f"Watchlist: {len(self.engine.watchlist)} symbols")
+        print(f"User: {self.engine.user} | Watchlist: {len(self.engine.watchlist)} symbols")
+
+    async def _cmd_user(self, args):
+        eng = self.engine
+        if not args:
+            print(f"Active user: {eng.user}")
+            return
+        sub = args[0].lower()
+        if sub == "list":
+            print("Users: " + ", ".join(
+                f"*{u}*" if u == eng.user else u for u in eng.users.users()
+            ))
+        elif sub == "add" and len(args) > 1:
+            name = " ".join(args[1:])
+            print(f"✅ User '{name}' created." if eng.users.add(name)
+                  else f"User '{name}' already exists.")
+        elif sub == "switch" and len(args) > 1:
+            name = " ".join(args[1:])
+            print(f"👤 Switched to '{name}'." if eng.set_user(name)
+                  else f"Unknown user '{name}'. Use 'user add {name}' first.")
+        elif sub == "remove" and len(args) > 1:
+            name = " ".join(args[1:])
+            print(f"🗑️  User '{name}' removed (files kept)." if eng.users.remove(name)
+                  else f"Cannot remove '{name}' (unknown or last remaining user).")
+        else:
+            print("Usage: user [list | add NAME | switch NAME | remove NAME]")
+
+    async def _cmd_users(self, args):
+        """`users` lists everyone (shortcut for `user list`)."""
+        await self._cmd_user(["list"])
 
     async def _cmd_start(self, args):
         print("🟢 Background surveillance started."

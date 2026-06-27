@@ -91,7 +91,13 @@ class DiscordNotifier:
 # EMBED BUILDERS
 # =============================================================================
 
-def build_signal_embed(signal, price: Optional[float] = None, currency: str = "€") -> dict:
+def _footer(user: Optional[str]) -> dict:
+    who = f" · {user}" if user else ""
+    return {"text": f"TradeBot{who} • {datetime.now().strftime('%d/%m/%Y %H:%M')}"}
+
+
+def build_signal_embed(signal, price: Optional[float] = None, currency: str = "€",
+                       user: Optional[str] = None) -> dict:
     """Build a rich Discord embed for a trading signal."""
     direction = signal.direction.value
     emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⏸️"}.get(direction, "❓")
@@ -114,7 +120,7 @@ def build_signal_embed(signal, price: Optional[float] = None, currency: str = "�
         "title": f"{emoji} Signal {action} — {signal.symbol}",
         "color": color,
         "fields": fields,
-        "footer": {"text": f"TradeBot • {datetime.now().strftime('%d/%m/%Y %H:%M')}"},
+        "footer": _footer(user),
         "timestamp": datetime.now().astimezone().isoformat(),
     }
     if signal.reasoning:
@@ -122,11 +128,12 @@ def build_signal_embed(signal, price: Optional[float] = None, currency: str = "�
     return embed
 
 
-def build_text_embed(title: str, body: str, color: int = _COLOR_INFO) -> dict:
+def build_text_embed(title: str, body: str, color: int = _COLOR_INFO,
+                     user: Optional[str] = None) -> dict:
     """Build a simple embed with a markdown body (e.g. report, newsletter)."""
     return {
         "title": title,
         "description": body[:4000],
         "color": color,
-        "footer": {"text": f"TradeBot • {datetime.now().strftime('%d/%m/%Y %H:%M')}"},
+        "footer": _footer(user),
     }

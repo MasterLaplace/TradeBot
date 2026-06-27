@@ -113,7 +113,15 @@ rien** :
 - ❌ Pas de **détection par vision YOLOv8** pour l'instant (lourd, modèles à gérer)
   — on reste sur la détection mathématique des figures.
 - ❌ Pas d'exécution d'ordres réels, pas de connexion broker.
-- ❌ Pas de gestion multi-utilisateurs / compte / web app. C'est **mon** outil.
+- ❌ Pas de web app / comptes en ligne. C'est un outil local.
+
+> **Mise à jour (multi-utilisateur).** Initialement hors-scope, désormais
+> supporté : plusieurs utilisateurs nommés (ex. la famille) peuvent partager
+> la même instance, chacun avec ses **propres** portefeuilles (réel + simulé),
+> sa watchlist et son journal, isolés dans `data/users/<nom>/`. On bascule
+> d'utilisateur depuis la console (`user switch …`) et le nom apparaît dans les
+> notifications Discord. Un **bot Discord interactif** (chacun pilote son
+> portefeuille depuis Discord) reste une idée future (cf. §11).
 
 ## 7. Sources de données & intégrations
 
@@ -155,6 +163,8 @@ src/
                        #   simulé (data/portfolio_sim.json)
     journal.py         # log append-only JSONL
     watchlist.py       # (NOUVEAU) liste d'actions suivies, persistée localement
+    users.py           # (NOUVEAU) registre multi-utilisateur ; état par user
+                       #   dans data/users/<nom>/ (real, sim, watchlist, journal)
   market/
     schedule.py        # (NOUVEAU) fenêtre active configurable, prochain créneau, sleep
   scheduler.py         # (NOUVEAU) tâches de fond (analyse en fenêtre active, scan,
@@ -189,7 +199,9 @@ sell AAPL 0.5 161.00         # saisir une vente RÉELLE
 portfolio                    # état du portefeuille réel + P&L live
 sim                          # état du portefeuille simulé (géré par le bot) + P&L
 report [n]                   # résumé du journal (P&L réel & simulé, trades, top signaux)
-status                       # marché ouvert/fermé, prochaine ouverture, tâches de fond
+status                       # marché ouvert/fermé, prochaine ouverture, tâches de fond, user
+user [list|add|switch|remove]# gérer les utilisateurs (portefeuilles séparés)
+users                        # lister les utilisateurs
 start / stop                 # démarrer/arrêter la surveillance de fond
 quit                         # quitter proprement
 ```
