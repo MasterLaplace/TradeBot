@@ -39,7 +39,7 @@ class NewsFetcher:
 
     BASE_URL = "https://finnhub.io/api/v1"
 
-    def __init__(self, api_key: str, max_cache_size: int = 1000):
+    def __init__(self, api_key: str = "", max_cache_size: int = 1000):
         self.api_key = api_key
         self._seen_urls: Set[str] = set()
         self._cache: Dict[str, List[NewsArticle]] = {}
@@ -61,6 +61,10 @@ class NewsFetcher:
         Returns:
             List of NewsArticle objects, deduplicated and sorted by timestamp.
         """
+        # No Finnhub key → go straight to the free yfinance news source.
+        if not self.api_key:
+            return await self._fallback_yfinance_news(symbol.upper())
+
         to_date = datetime.now().strftime("%Y-%m-%d")
         from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 

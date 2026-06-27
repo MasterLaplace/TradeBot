@@ -64,10 +64,10 @@ class TradeBotRunner:
         self._portfolio_manager = PortfolioManager()
         self._scanner = MarketScanner()
 
-        # Data components
-        self._news_fetcher: Optional[NewsFetcher] = None
-        if self.settings.has_finnhub:
-            self._news_fetcher = NewsFetcher(api_key=self.settings.finnhub_api_key)
+        # Data components — news always available (yfinance fallback when no Finnhub key)
+        self._news_fetcher: NewsFetcher = NewsFetcher(
+            api_key=self.settings.finnhub_api_key if self.settings.has_finnhub else ""
+        )
 
         # Notification
         self._notifier: Optional[TelegramNotifier] = None
@@ -91,11 +91,7 @@ class TradeBotRunner:
         """
         logger.info(f"📊 Analyzing {symbol}...")
 
-        # 1. Fetch price data
-        if not self.settings.has_finnhub:
-            logger.error("Finnhub API key required for analysis. Set FINNHUB_API_KEY in .env")
-            return self._empty_signal(symbol)
-
+        # 1. Fetch price data (Finnhub if a key is set, otherwise yfinance fallback)
         try:
             source = FinnhubRESTSource(
                 symbol=symbol,
