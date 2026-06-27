@@ -1,8 +1,12 @@
 """
 Portfolio Manager Module.
 
-Handles tracking and persisting the user's local simulated (or real) portfolio.
-Persists data to `data/portfolio.json`.
+Tracks and persists a portfolio (cash + positions) to a local JSON file.
+
+The same class backs BOTH portfolios (SPEC.md §3.6):
+- the REAL one (positions I enter by hand after buying on Trade Republic),
+- the SIMULATED one (auto-managed by the bot to prove it works),
+each in its own file via the `filename` argument.
 """
 
 import json
@@ -19,17 +23,29 @@ logger = logging.getLogger(__name__)
 class PortfolioManager:
     """Manages reading and writing portfolio state to local storage."""
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(
+        self,
+        data_dir: str = "data",
+        filename: str = "portfolio.json",
+        starting_cash: float = 10000.0,
+        label: str = "Portfolio",
+        track_cash: bool = True,
+    ):
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.portfolio_file = self.data_dir / "portfolio.json"
+        self.portfolio_file = self.data_dir / filename
+        self.starting_cash = starting_cash
+        self.label = label
+        # The real portfolio only records positions bought with external money,
+        # so it does not model a cash balance (track_cash=False).
+        self.track_cash = track_cash
         self.portfolio = self._load()
 
     def _load(self) -> Portfolio:
         """Load portfolio from JSON file."""
         if not self.portfolio_file.exists():
             # Create a default empty portfolio
-            p = Portfolio(cash=10000.0)
+            p = Portfolio(cash=self.starting_cash)
             self._save(p)
             return p
 
@@ -51,7 +67,7 @@ class PortfolioManager:
             return Portfolio(cash=cash, positions=positions)
         except Exception as e:
             logger.error(f"Failed to load portfolio: {e}")
-            return Portfolio(cash=10000.0)
+            return Portfolio(cash=self.starting_cash)
 
     def _save(self, portfolio: Portfolio = None) -> None:
         """Save portfolio to JSON file."""
@@ -81,13 +97,11 @@ class PortfolioManager:
             return False
 
         cost = quantity * price
-        if self.portfolio.cash < cost:
-            logger.warning(f"Insufficient funds to buy {quantity} {symbol}")
-            # We still allow it for simulation tracking, but warn.
-            # You can comment out the next line to strictly enforce cash limits
-            pass
-
-        self.portfolio.cash -= cost
+        if self.track_cash:
+            if self.portfolio.cash < cost:
+                logger.warning(f"Insufficient funds to buy {quantity} {symbol}")
+                # We still allow it for simulation tracking, but warn.
+            self.portfolio.cash -= cost
 
         if symbol in self.portfolio.positions:
             pos = self.portfolio.positions[symbol]
@@ -121,8 +135,8 @@ class PortfolioManager:
             logger.warning(f"Cannot sell {quantity} {symbol}, only have {pos.quantity}")
             return False
 
-        proceeds = quantity * price
-        self.portfolio.cash += proceeds
+        if self.track_cash:
+            self.portfolio.cash += quantity * price
 
         new_qty = pos.quantity - quantity
         if new_qty <= 0:
@@ -176,23 +190,29 @@ class PortfolioManager:
                 "pnl_pct": round((pnl / cost * 100) if cost > 0 else 0.0, 2),
             }
 
-        total = self.portfolio.cash + holdings_value
+        cash = self.portfolio.cash if self.track_cash else 0.0
+        total = cash + holdings_value
         unrealized_pnl = holdings_value - cost_basis
 
         return {
-            "cash": round(self.portfolio.cash, 2),
+            "cash": round(cash, 2),
             "holdings_value": round(holdings_value, 2),
+            "cost_basis": round(cost_basis, 2),
             "total": round(total, 2),
             "unrealized_pnl": round(unrealized_pnl, 2),
+            "track_cash": self.track_cash,
             "positions": breakdown,
         }
 
     def get_valued_summary(self, prices: Dict[str, float]) -> str:
         """Human-readable summary including live P&L."""
         mtm = self.mark_to_market(prices)
-        lines = [
-            "💼 *Portfolio (live)*",
-            f"💵 Cash: `${mtm['cash']:,.2f}`",
+        lines = [f"💼 *{self.label} (live)*"]
+        if mtm["track_cash"]:
+            lines.append(f"💵 Cash: `${mtm['cash']:,.2f}`")
+        else:
+            lines.append(f"💵 Invested: `${mtm['cost_basis']:,.2f}`")
+        lines += [
             f"📦 Holdings: `${mtm['holdings_value']:,.2f}`",
             f"💰 Total: `${mtm['total']:,.2f}`",
             f"📈 Unrealized P&L: `${mtm['unrealized_pnl']:+,.2f}`",
@@ -212,7 +232,7 @@ class PortfolioManager:
     def get_summary(self) -> str:
         """Get a human-readable summary of the portfolio."""
         lines = [
-            f"💼 *Portfolio Summary*",
+            f"💼 *{self.label} Summary*",
             f"💵 Cash: `${self.portfolio.cash:,.2f}`",
             ""
         ]

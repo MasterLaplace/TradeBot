@@ -73,12 +73,27 @@ class TradeJournal:
 
     def tail(self, n: int = 20) -> List[dict]:
         """Return the last n events (for quick review)."""
+        return self._read_all()[-n:]
+
+    def since(self, days: float) -> List[dict]:
+        """Return events newer than `days` days ago."""
+        from datetime import timedelta
+        cutoff = datetime.now() - timedelta(days=days)
+        out = []
+        for ev in self._read_all():
+            try:
+                if datetime.fromisoformat(ev["ts"]) >= cutoff:
+                    out.append(ev)
+            except (KeyError, ValueError):
+                continue
+        return out
+
+    def _read_all(self) -> List[dict]:
         if not self.path.exists():
             return []
         try:
             with open(self.path, "r") as f:
-                lines = f.readlines()
-            return [json.loads(line) for line in lines[-n:]]
+                return [json.loads(line) for line in f if line.strip()]
         except Exception as e:
             logger.error(f"Failed to read journal: {e}")
             return []

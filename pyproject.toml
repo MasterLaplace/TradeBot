@@ -50,7 +50,7 @@ all = [
 ]
 
 [project.scripts]
-tradebot = "src.cli:main"
+tradebot = "src.console:main"
 
 [tool.black]
 line-length = 88
