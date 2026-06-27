@@ -1,83 +1,27 @@
 # ============================================
-# 🐳 Docker Compose - Trading Bot
+# 🐳 Docker Compose — TradeBot
 # ============================================
-# Services for backtesting and live paper trading
 
 services:
   # ----------------------------------------
-  # Backtest service - run simulations
+  # Interactive console (the app)
+  # Run with: docker compose run --rm tradebot
   # ----------------------------------------
-  backtest:
+  tradebot:
     build:
       context: .
       target: production
-    container_name: trading-bot-backtest
-    volumes:
-      - ./data:/app/data:ro
-      - ./outputs:/app/outputs
-    command: >
-      python tradebot.py backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output /app/outputs/docker_backtest
-
-  # ----------------------------------------
-  # Live paper trading (Binance)
-  # ----------------------------------------
-  live-binance:
-    build:
-      context: .
-      target: live
-    container_name: trading-bot-live
+    container_name: tradebot
+    stdin_open: true   # keep STDIN open for the REPL
+    tty: true          # allocate a TTY
+    env_file:
+      - .env
     environment:
-      - LIVE_SYMBOLS=BTCUSDT,ETHUSDT
-      - LIVE_INTERVAL=5
-      - LIVE_DURATION=0  # 0 = infinite
+      - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
-      - ./outputs:/app/outputs
-    restart: unless-stopped
-    command: >
-      python tradebot.py paper --symbols $${LIVE_SYMBOLS} --interval $${LIVE_INTERVAL} --duration $${LIVE_DURATION} --strategy safe_profit --output /app/experiments/live/docker_live.csv
-    # Uncomment to limit resources
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.5'
-    #       memory: 256M
-
-  # ----------------------------------------
-  # Scoring service - evaluate results
-  # ----------------------------------------
-  score:
-    build:
-      context: .
-      target: production
-    container_name: trading-bot-score
-    volumes:
-      - ./data:/app/data:ro
-      - ./outputs:/app/outputs
-    command: >
-      python -c "
-      import sys
-      sys.path.insert(0, '.')
-      from src.data.sources import DataSourceFactory
-      from src.strategies import StrategyFactory
-      from src.engine.backtest import BacktestConfig, BacktestEngine, StrategyComparator
-      ds = DataSourceFactory.from_csv('data/crypto_btc_eth_4h_90d.csv')
-      strat = StrategyFactory.create('safe_profit')
-      cfg = BacktestConfig(initial_capital=10000)
-      engine = BacktestEngine(cfg)
-      res = engine.run(strat, ds)
-      comp = StrategyComparator(cfg)
-      bm = comp.calculate_benchmark(ds)
-      print('='*50)
-      print('📊 SCORING RESULTS')
-      print('='*50)
-      print('Return:', res.total_return)
-      print('Sharpe:', res.sharpe_ratio)
-      print('Max DD:', res.max_drawdown)
-      print('Alpha vs 50/50:', res.total_return - bm['50_50'])
-      "
+      - ./data:/app/data   # persist watchlist / portfolios / journal
     depends_on:
-      backtest:
-        condition: service_completed_successfully
+      - ollama
 
   # ----------------------------------------
   # Test suite
@@ -86,54 +30,22 @@ services:
     build:
       context: .
       target: production
-    container_name: trading-bot-test
-    command: python -m pytest tests/ -v
+    container_name: tradebot-test
+    entrypoint: ["python", "-m", "pytest", "tests/", "-v"]
     volumes:
       - ./tests:/app/tests:ro
 
   # ----------------------------------------
-  # Ollama - Local AI Server
+  # Ollama — local AI server (optional)
   # ----------------------------------------
   ollama:
     image: ollama/ollama:latest
-    container_name: trading-bot-ollama
+    container_name: tradebot-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
-    # Uncomment for GPU support:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
-  # ----------------------------------------
-  # Monitor - Continuous market surveillance
-  # ----------------------------------------
-  monitor:
-    build:
-      context: .
-      target: production
-    container_name: trading-bot-monitor
-    env_file:
-      - .env
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-    volumes:
-      - ./data:/app/data:ro
-      - ./outputs:/app/outputs
-    restart: unless-stopped
-    depends_on:
-      - ollama
-    command: >
-      python tradebot.py monitor
-
-# Named volumes for persistence
 volumes:
-  outputs:
-  experiments:
   ollama_data:

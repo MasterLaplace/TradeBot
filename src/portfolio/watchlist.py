@@ -25,7 +25,7 @@ class Watchlist:
 
     def _load(self, seed: List[str]) -> List[str]:
         if not self.file.exists():
-            symbols = [s.upper() for s in seed]
+            symbols = list(dict.fromkeys(s.upper() for s in seed))  # dedup, keep order
             self._save(symbols)
             return symbols
         try:

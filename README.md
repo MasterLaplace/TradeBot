@@ -1,248 +1,108 @@
-# 🤖 TradeBot v2.0
+# 🤖 TradeBot
 
-Algorithmic trading bot built with a SOLID architecture and a single unified CLI entrypoint.
+A **free, local-first personal stock-analysis copilot**. It runs as an
+interactive console 24/7, watches a list of stocks, and produces clear
+**BUY / SELL / HOLD** advice (with explanations) that *you* execute by hand on
+Trade Republic. It never connects to a broker and never trades for you.
 
-Comprehensive toolkit for backtesting trading strategies, running simulated live (paper) trading, and executing parallel experiments across multiple datasets and strategies.
+> Full product spec: [`SPEC.md`](SPEC.md).
 
----
+## What it does
 
-## Getting Started
+- **Interactive console (REPL)** — launch `tradebot`, then type commands. No
+  argument-based CLI.
+- **Signals** combining technical analysis (0.40), chart patterns (0.35) and
+  news sentiment (0.25) → a composite score (BUY > +0.20, SELL < −0.20).
+- **Two portfolios**: a **real** one (positions you enter by hand) and a
+  **simulated** one the bot manages itself to prove it works.
+- **Background surveillance** during an **active window** (weekdays 8h–23h
+  Europe/Paris by default); it sleeps outside the window to save energy.
+- **Market scan** for opportunities and a **weekly newsletter**.
+- **Discord notifications** via webhook (Telegram optional).
+- **Journal** of every signal/trade/equity snapshot in `data/journal.jsonl`.
 
-### Installation
+## Privacy & safety
 
-```bash
-# Clone the repository and create a virtual environment
-git clone <repo-url>
-cd Hackaton
-python3 -m venv venv
-source venv/bin/activate
+- Default market data is **yfinance** — no account, no ID.
+- **No broker connection.** The bot only advises and simulates; you place real
+  orders yourself and record them with `buy` / `sell`.
 
-# Install requirements
-pip install -r requirement.txt
-```
+## Install
 
-### Quick test
-
-```bash
-source venv/bin/activate
-python -m pytest -q
-```
-
-If import errors occur:
-```bash
-PYTHONPATH=$(pwd) python -m pytest -q
-```
-
-### Make `tradebot` a convenience command
-
-**Option 1** — local symlink (ensure `~/.local/bin` is in PATH):
-```bash
-ln -s "$(pwd)/tradebot.py" "$HOME/.local/bin/tradebot"
-```
-
-**Option 2** — alias in zsh:
-```bash
-echo "alias tradebot='$(pwd)/venv/bin/python $(pwd)/tradebot.py'" >> ~/.zshrc
-source ~/.zshrc
-```
-
----
-
-## Summary
-
-This repository includes:
-- **Multiple trading strategies** with different risk/reward profiles
-- **Backtesting engine** for historical analysis
-- **Paper trading engine** for simulated live sessions
-- **Parallel runners** for efficient multi-experiment execution
-- **Reporting & charts** in Markdown and PNG formats
-
-The codebase follows SOLID principles for maintainability and extensibility.
-
----
-
-## Architecture
-
-```
-tradebot (script: `tradebot.py`)  # CLI entrypoint
-src/
-├── cli/                 # CLI (argparse + command classes)
-├── core/                # Domain models
-├── data/                # Data sources (CSV, Binance REST, broadcaster)
-├── engine/              # Engines: backtest and paper-trading
-├── reporting/           # Reports and charts (Markdown + PNG)
-└── strategies/          # Strategy implementations
-```
-
----
-
-## Usage
-
-### Show help
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-tradebot --help  # or: python tradebot.py --help
-tradebot <command> --help
+git clone <repo-url> && cd TradeBot
+uv sync                  # install dependencies
+cp .env.example .env     # optional — all values are optional
 ```
 
-### Available commands
+## Run
+
+```bash
+uv run tradebot          # or: python tradebot.py
+```
+
+You get a prompt:
+
+```
+tradebot> help
+tradebot> add NVDA
+tradebot> analyze AAPL
+tradebot> start          # background surveillance (in active window)
+tradebot> buy AAPL 0.5 152.30   # record a real Trade Republic order
+tradebot> portfolio
+tradebot> sim
+tradebot> report
+tradebot> quit
+```
+
+### Commands
 
 | Command | Description |
 |---|---|
-| `backtest` | Run a backtest on historical data |
-| `compare` | Compare several strategies on the same dataset |
-| `paper` | Run a live-simulated (paper) session using live prices |
-| `fetch` | Download data from Binance REST into CSV |
-| `report` | Generate a report with charts (Markdown + PNG) |
-| `list` | List available strategies |
-| `test` | Test Binance API connectivity |
-| `parallel` | Run parallel backtests or parallel paper sessions |
+| `add / remove / list` | manage the watchlist |
+| `analyze SYMBOL [days]` | one-shot analysis + signal |
+| `scan` | scan the market for opportunities |
+| `buy / sell SYMBOL QTY PRICE` | record a **real** position |
+| `portfolio` / `sim` | real / simulated portfolio with live P&L |
+| `report [n]` | recent journal activity |
+| `status` | market window + background tasks |
+| `start` / `stop` | background surveillance |
+| `quit` | exit cleanly |
 
-### Examples
+## Configuration
 
-```bash
-# Test Binance connectivity
-tradebot test
+Everything is optional (see [`.env.example`](.env.example)): a Finnhub key
+(history; yfinance is the default), a Discord webhook (alerts + newsletter),
+Ollama (AI sentiment; rule-based fallback otherwise), the active window, and
+the simulation parameters.
 
-# List available strategies
-tradebot list
-
-# Fetch 30 days of BTC/ETH data and save as CSV
-tradebot fetch --days 30 --output data/crypto_30d.csv
-
-# Run a backtest on a strategy
-tradebot backtest --data data/crypto_30d.csv --strategy safe_profit
-
-# Compare all strategies on the same dataset
-tradebot compare --data data/crypto_30d.csv
-
-# Generate a report (Markdown + PNG charts)
-tradebot report --data data/crypto_30d.csv --output reports/
-
-# Run 1 hour of paper trading with safe_profit (live prices simulated)
-tradebot paper --duration 3600 --strategy safe_profit
-```
-
----
-
-## Parallel Backtests
-
-Use `parallel` to run many strategy/dataset combinations in parallel and generate a summary CSV.
-
-### Key options
-
-- `--datasets` / `-d`: one or more CSV paths or glob patterns (e.g., `data/*.csv`)
-- `--strategies` / `-s`: pick a subset of strategies (default: all available)
-- `--workers` / `-w`: number of parallel processes (default: cpu_count)
-- `--capital` / `-c`: initial capital for each run (default: 10000)
-- `--fee-rate`: simulated fee rate (default: 0.001)
-- `--per-strategy-dir` / `-p`: optional dir to write one CSV per strategy
-- `--append`: append to an existing results file instead of overwriting
-- `--no-progress`: disable the progress bar (if `tqdm` is available)
-
-### Examples (parallel)
+## Tests
 
 ```bash
-# Run parallel backtests on all CSVs in data/
-tradebot parallel --datasets data/*.csv
-
-# Run a specific strategy on datasets and write per-strategy CSVs
-tradebot parallel -d data/*.csv -s safe_profit composite -w 4 -p outputs/parallel_by_strategy
-
-# Append results to existing CSV
-tradebot parallel -d data/*.csv -s safe_profit --append -o outputs/parallel_summary.csv
-
-# Run parallel paper sessions with 2 workers
-tradebot parallel --mode paper --strategies safe_profit composite --symbols BTCUSDT ETHUSDT --duration 60 --interval 1 -w 2 --output outputs/parallel_paper_summary.csv
+uv run pytest -q
 ```
-
-**Paper mode note**: In `--mode paper`, the CLI uses a centralized price broadcaster to reduce REST calls (or uses websockets when available). Avoid using a very small `--interval` across many workers to prevent hitting API rate limits.
-
----
-
-## Strategies
-
-Examples of strategies included in the repo:
-
-| Strategy | Description |
-|---|---|
-| `safe_profit` | Conservative blend of indicators with reasonable drawdown control |
-| `adaptive_trend` | Trend-following with volatility filter |
-| `composite` | Multi-indicator strategy (SMA + stoploss + volatility scaling) |
-| `sma` | Simple Moving Average crossover |
-| `baseline` | A simple momentum baseline |
-
----
-
-## Progress bar
-
-The progress bar is displayed if `tqdm` is installed. Install it with:
-
-```bash
-pip install tqdm
-```
-
----
 
 ## Docker
 
 ```bash
-# Build the Docker image
-docker build -t trading-bot:latest .
-
-# Run a backtest inside the container
-docker run --rm -v $(pwd)/data:/app/data -v $(pwd)/outputs:/app/outputs trading-bot:latest backtest --data data/crypto_btc_eth_4h_90d.csv --strategy safe_profit --output /app/outputs/docker_backtest
-
-# Run a 1-hour paper trading session (simulated)
-docker run --rm -v $(pwd)/experiments:/app/experiments trading-bot:latest paper --duration 3600 --strategy safe_profit --symbols BTCUSDT ETHUSDT
+docker compose run --rm tradebot   # interactive console (TTY)
+docker compose run --rm test       # test suite
 ```
 
----
+## Architecture
 
-## Development
-
-- This project uses a Python virtual environment (`venv`), so that required packages like `pandas`, `numpy`, `matplotlib` and others are available.
-- Large dependencies (e.g., `pandas`, `matplotlib`) are imported at module level to avoid surprising runtime import errors. Optional packages (e.g., `websockets`) remain conditional to allow running only a subset of features.
-- Run tests with the virtual environment activated.
-
----
-
-## Data Structure
-
-CSV format expected for historical files:
-
-```csv
-epoch,Asset A,Asset B,Cash
-0,100000.0,3500.0,1.0
-1,100500.0,3520.0,1.0
 ```
-
----
-
-## Tests
-
-Run the tests from the repository root with the venv activated.
-
-```bash
-source venv/bin/activate
-python -m pytest -q
+src/
+  console.py     # interactive REPL — entry point
+  engine.py      # application core (analysis + dual portfolios + actions)
+  scheduler.py   # energy-sober background loop
+  config.py      # .env-driven settings
+  core/models.py # domain models (Candle, Position, Portfolio, TradingSignal…)
+  data/          # quotes.py (live), finnhub_source.py (history), news_fetcher.py
+  analysis/      # technical, pattern_detector, sentiment, signal_aggregator, scanner
+  portfolio/     # manager.py, watchlist.py, journal.py
+  market/        # schedule.py (active window)
+  reporting/     # discord.py, report.py, telegram_bot.py
 ```
-
-If import errors occur, run with PYTHONPATH:
-
-```bash
-PYTHONPATH=$(pwd) python -m pytest -q
-```
-
----
-
-## Contribution & Coding Standards
-
-- Use `ruff` for linting and `black` for formatting (or the pre-commit hooks if enabled).
-- Add tests for new features and run `pytest` locally before opening a PR.
-
----
-
-## License
-
-MIT License — Use at your own risk. This software is for educational and simulation purposes.

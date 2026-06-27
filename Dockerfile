@@ -1,8 +1,7 @@
 # ============================================
-# 🐳 TradeBot - Dockerfile (new)
+# 🐳 TradeBot — Dockerfile
 # ============================================
-# Multi-stage build for a small production image
-# Uses the new `src/` structure and `tradebot.py` entrypoint
+# Small image running the interactive console (src/console.py).
 
 FROM python:3.12-slim AS base
 
@@ -13,10 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install minimal OS deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
+    curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # --------------------------------------------
@@ -26,43 +23,26 @@ FROM base AS builder
 
 COPY pyproject.toml /app/pyproject.toml
 COPY src/ /app/src/
-RUN python -m pip install --upgrade pip
-RUN pip install --user -e "/app"
+RUN python -m pip install --upgrade pip && pip install --user -e "/app"
 
 # --------------------------------------------
-# Production: copy app and installed libs
+# Production
 # --------------------------------------------
 FROM base AS production
 
-# Copy installed packages from builder
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
-# Copy code
 COPY tradebot.py /app/tradebot.py
 COPY src/ /app/src/
-COPY data/ /app/data/
-COPY reports/ /app/reports/
 COPY pyproject.toml /app/pyproject.toml
 COPY .env.example /app/.env.example
 
-# Create outputs dir
-RUN mkdir -p /app/outputs
+RUN mkdir -p /app/data
 
-# Healthcheck: basic smoke test using module import (no external network call)
+# Smoke test: the package imports cleanly (no network).
 HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import src; print('OK')" || exit 1
+  CMD python -c "import src.console; print('OK')" || exit 1
 
-# Default command
+# The console is interactive — run with `docker run -it`.
 ENTRYPOINT ["python", "tradebot.py"]
-CMD ["--help"]
-
-# --------------------------------------------
-# Live image (adds any real-time connectors by user)
-# --------------------------------------------
-FROM production AS live
-
-# NOTE: For live trading, the container will run the `paper` command.
-# EXAMPLE usage when running the container:
-# docker run --rm trading-bot:latest paper --duration 3600 --strategy safe_profit
-

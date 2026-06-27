@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """
-TradeBot - Unified Trading Bot Entry Point.
+TradeBot — launcher for the interactive console.
+
+Equivalent to the installed `tradebot` command. No arguments: it opens the
+interactive console (REPL) where you type commands. See SPEC.md §9.
 
 Usage:
-    python tradebot.py --help
-    python tradebot.py backtest --data data/crypto.csv --strategy safe_profit
-    python tradebot.py paper --duration 3600
-    python tradebot.py fetch --days 30 --output data/crypto.csv
-
-Or use as module:
-    python -m src.cli --help
+    python tradebot.py        # or, once installed:  tradebot
 """
 
 import sys
 from pathlib import Path
 
-# Add src to path for clean imports
+# Allow running straight from a checkout without installing.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.cli import main
+from src.console import main
 
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    main()
