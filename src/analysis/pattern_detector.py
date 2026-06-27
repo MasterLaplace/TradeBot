@@ -1,13 +1,10 @@
 """
 Chart Pattern Detection Module.
 
-Implements two complementary approaches for detecting chart patterns:
-1. Mathematical (PIPs/Zigzag): Algorithmic extraction of pivot points and
-   geometric validation of formations (Double Bottom, Head & Shoulders, etc.)
-2. Visual (YOLOv8): Computer vision detection on candlestick chart images
-   using the foduucom/stockmarket-pattern-detection-yolov8 model.
-
-A PatternDetector facade combines both approaches for consensus scoring.
+Mathematical (PIPs/Zigzag) detection: algorithmic extraction of pivot points
+and geometric validation of formations (Double Bottom, Double Top, Head &
+Shoulders, etc.). Visual (YOLOv8) detection is out of scope for the MVP
+(SPEC.md §6/§11).
 
 Usage:
     detector = PatternDetector()
@@ -32,31 +29,8 @@ try:
 except ImportError:
     HAS_SCIPY = False
 
-try:
-    from ultralytics import YOLO
-    HAS_YOLO = True
-except ImportError:
-    HAS_YOLO = False
-
-try:
-    import mplfinance as mpf
-    HAS_MPLFINANCE = True
-except ImportError:
-    HAS_MPLFINANCE = False
-
-
-# =============================================================================
-# YOLOV8 CLASS MAPPING
-# =============================================================================
-
-YOLO_CLASS_MAP: Dict[int, Tuple[str, SignalDirection]] = {
-    0: ("Head and shoulders bottom", SignalDirection.BUY),   # Inverse H&S → bullish
-    1: ("Head and shoulders top", SignalDirection.SELL),      # H&S → bearish
-    2: ("M_Head (Double Top)", SignalDirection.SELL),         # Double top → bearish
-    3: ("StockLine (Trendline)", SignalDirection.HOLD),       # Neutral
-    4: ("Triangle", SignalDirection.HOLD),                     # Consolidation
-    5: ("W_Bottom (Double Bottom)", SignalDirection.BUY),     # Double bottom → bullish
-}
+# NOTE: Visual (YOLOv8) pattern detection is intentionally out of scope for the
+# MVP (SPEC.md §6/§11). We use mathematical pivot-point detection only.
 
 
 # =============================================================================
@@ -355,163 +329,6 @@ class MathPatternDetector:
         return patterns
 
 
-# =============================================================================
-# VISUAL PATTERN DETECTOR (YOLOv8)
-# =============================================================================
-
-class VisualPatternDetector:
-    """
-    Detect chart patterns using YOLOv8 computer vision.
-
-    Generates candlestick chart images from OHLC data and runs inference
-    with the foduucom/stockmarket-pattern-detection-yolov8 model.
-    """
-
-    MODEL_NAME = "foduucom/stockmarket-pattern-detection-yolov8"
-
-    def __init__(
-        self,
-        confidence_threshold: float = 0.30,
-        max_time_gap_minutes: int = 10,
-    ):
-        self.confidence_threshold = confidence_threshold
-        self.max_time_gap_minutes = max_time_gap_minutes
-        self._model: Optional[object] = None
-
-    def _load_model(self) -> None:
-        """Lazy-load the YOLOv8 model."""
-        if self._model is None:
-            if not HAS_YOLO:
-                raise ImportError(
-                    "ultralytics is required for visual pattern detection. "
-                    "Install with: pip install 'tradebot[analysis]'"
-                )
-            self._model = YOLO(self.MODEL_NAME)
-            logger.info(f"Loaded YOLOv8 model: {self.MODEL_NAME}")
-
-    def detect(
-        self,
-        df: pd.DataFrame,
-        symbol: str = "",
-    ) -> List[ChartPattern]:
-        """Run visual pattern detection on OHLC data.
-
-        Args:
-            df: DataFrame with 'open', 'high', 'low', 'close' columns.
-                Optionally 'volume' and a datetime index.
-            symbol: Ticker symbol for labeling.
-
-        Returns:
-            List of detected ChartPattern objects.
-        """
-        required_cols = {"open", "high", "low", "close"}
-        if not required_cols.issubset(df.columns):
-            logger.warning(f"Visual detection requires OHLC columns. Got: {list(df.columns)}")
-            return []
-
-        if len(df) < 20:
-            return []
-
-        # Check for time gaps
-        if self._has_time_gap(df):
-            logger.warning("Time gap detected in data, skipping visual detection")
-            return []
-
-        # Generate chart image
-        image_path = self._generate_chart_image(df)
-        if image_path is None:
-            return []
-
-        # Run inference
-        return self._run_inference(image_path, symbol)
-
-    def _has_time_gap(self, df: pd.DataFrame) -> bool:
-        """Check for time gaps exceeding max_time_gap_minutes."""
-        if not isinstance(df.index, pd.DatetimeIndex):
-            return False
-
-        if len(df.index) < 2:
-            return False
-
-        time_diffs = df.index.to_series().diff().dropna()
-        max_gap = pd.Timedelta(minutes=self.max_time_gap_minutes)
-        return (time_diffs > max_gap).any()
-
-    def _generate_chart_image(self, df: pd.DataFrame) -> Optional[str]:
-        """Generate a candlestick chart image from OHLC data."""
-        if not HAS_MPLFINANCE:
-            logger.warning("mplfinance not installed, cannot generate chart images")
-            return None
-
-        import tempfile
-        import os
-
-        try:
-            chart_df = df[["open", "high", "low", "close"]].copy()
-            if "volume" in df.columns:
-                chart_df["volume"] = df["volume"]
-
-            # Ensure datetime index
-            if not isinstance(chart_df.index, pd.DatetimeIndex):
-                chart_df.index = pd.to_datetime(chart_df.index)
-
-            # Save to temp file
-            temp_path = os.path.join(tempfile.gettempdir(), f"tradebot_chart_{id(df)}.png")
-            mpf.plot(
-                chart_df,
-                type="candle",
-                style="charles",
-                savefig=dict(fname=temp_path, dpi=150, bbox_inches="tight"),
-                volume="volume" in chart_df.columns,
-            )
-            return temp_path
-
-        except Exception as e:
-            logger.error(f"Failed to generate chart image: {e}")
-            return None
-
-    def _run_inference(self, image_path: str, symbol: str) -> List[ChartPattern]:
-        """Run YOLOv8 inference on a chart image."""
-        self._load_model()
-
-        try:
-            results = self._model.predict(
-                source=image_path,
-                conf=self.confidence_threshold,
-                save=False,
-                verbose=False,
-            )
-
-            patterns = []
-            for result in results:
-                for box in result.boxes:
-                    class_id = int(box.cls[0])
-                    confidence = float(box.conf[0])
-
-                    if class_id in YOLO_CLASS_MAP:
-                        name, direction = YOLO_CLASS_MAP[class_id]
-                        bbox = box.xyxy[0].tolist()
-
-                        patterns.append(ChartPattern(
-                            pattern_name=name,
-                            confidence=confidence,
-                            direction=direction,
-                            detection_method="yolov8",
-                            symbol=symbol,
-                            timestamp=datetime.now(),
-                            metadata={
-                                "class_id": class_id,
-                                "bbox": bbox,
-                                "image_path": image_path,
-                            },
-                        ))
-
-            return patterns
-
-        except Exception as e:
-            logger.error(f"YOLOv8 inference failed: {e}")
-            return []
-
 
 # =============================================================================
 # PATTERN DETECTOR FACADE
@@ -519,64 +336,39 @@ class VisualPatternDetector:
 
 class PatternDetector:
     """
-    Facade combining mathematical and visual pattern detection.
+    Facade over mathematical (PIPs/zigzag) chart-pattern detection.
 
-    Uses both approaches and produces a consensus score.
-    Falls back gracefully if YOLOv8 dependencies are not available.
+    The `use_vision` flag is kept for API compatibility but is a no-op in the
+    MVP — visual (YOLOv8) detection is out of scope (SPEC.md §6/§11).
     """
 
     def __init__(
         self,
         use_math: bool = True,
-        use_vision: bool = True,
+        use_vision: bool = False,
         math_kwargs: Optional[dict] = None,
-        vision_kwargs: Optional[dict] = None,
+        **_ignored,
     ):
         self.use_math = use_math
-        self.use_vision = use_vision and HAS_YOLO and HAS_MPLFINANCE
-
         self._math = MathPatternDetector(**(math_kwargs or {})) if use_math else None
-        self._vision = VisualPatternDetector(**(vision_kwargs or {})) if self.use_vision else None
-
-        if use_vision and not self.use_vision:
-            logger.info(
-                "Visual pattern detection disabled (missing ultralytics or mplfinance). "
-                "Install with: pip install 'tradebot[analysis]'"
-            )
+        if use_vision:
+            logger.info("Visual pattern detection is out of scope for the MVP; using math only.")
 
     def detect(
         self,
         df: pd.DataFrame,
         symbol: str = "",
     ) -> List[ChartPattern]:
-        """Run all available detection methods and return combined results.
-
-        Args:
-            df: DataFrame with at least 'close' column. OHLC preferred for vision.
-            symbol: Ticker symbol.
-
-        Returns:
-            Combined list of ChartPattern objects from all detectors.
-        """
-        all_patterns: List[ChartPattern] = []
-
-        if self._math:
-            try:
-                math_patterns = self._math.detect(df, symbol)
-                all_patterns.extend(math_patterns)
-                logger.info(f"Math detector found {len(math_patterns)} patterns for {symbol}")
-            except Exception as e:
-                logger.error(f"Math pattern detection failed: {e}")
-
-        if self._vision:
-            try:
-                vision_patterns = self._vision.detect(df, symbol)
-                all_patterns.extend(vision_patterns)
-                logger.info(f"Vision detector found {len(vision_patterns)} patterns for {symbol}")
-            except Exception as e:
-                logger.error(f"Visual pattern detection failed: {e}")
-
-        return all_patterns
+        """Run mathematical pattern detection and return the patterns found."""
+        if not self._math:
+            return []
+        try:
+            patterns = self._math.detect(df, symbol)
+            logger.info(f"Math detector found {len(patterns)} patterns for {symbol}")
+            return patterns
+        except Exception as e:
+            logger.error(f"Math pattern detection failed: {e}")
+            return []
 
     def get_consensus_score(self, patterns: List[ChartPattern]) -> float:
         """Compute a consensus pattern score from -1.0 (bearish) to +1.0 (bullish).
