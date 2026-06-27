@@ -36,6 +36,8 @@ from .analysis.sentiment import OllamaSentimentAnalyzer
 from .analysis.signal_aggregator import SignalAggregator
 from .analysis.scanner import MarketScanner
 from .portfolio.manager import PortfolioManager
+from .portfolio.journal import TradeJournal
+from .data.quotes import get_current_prices
 from .reporting.telegram_bot import TelegramNotifier
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,7 @@ class TradeBotRunner:
         self._signal_aggregator = SignalAggregator()
         self._portfolio_manager = PortfolioManager()
         self._scanner = MarketScanner()
+        self._journal = TradeJournal()
 
         # Data components — news always available (yfinance fallback when no Finnhub key)
         self._news_fetcher: NewsFetcher = NewsFetcher(
@@ -210,6 +213,125 @@ class TradeBotRunner:
                     await asyncio.sleep(wait_time)
                 except asyncio.CancelledError:
                     break
+
+    async def run_simulation(
+        self,
+        auto_trade: bool = True,
+        trade_budget: float = 50.0,
+        buy_confidence: float = 0.25,
+        sell_confidence: float = 0.25,
+        cycles: Optional[int] = None,
+    ) -> None:
+        """Run a continuous paper-trading simulation and log everything.
+
+        Each cycle: analyze watchlist ∪ held symbols, optionally execute paper
+        trades on strong signals, mark the portfolio to market, and append a
+        full record to data/journal.jsonl.
+
+        Args:
+            auto_trade: If True, the bot opens/closes paper positions itself.
+            trade_budget: Cash (in account currency) committed per BUY.
+            buy_confidence: Min confidence to act on a BUY signal.
+            sell_confidence: Min confidence to act on a SELL signal.
+            cycles: Stop after N cycles (None = run forever).
+        """
+        interval = self.settings.analysis_interval
+        self._running = True
+        cycle = 0
+
+        print(self.settings.summary())
+        print(f"\n🧪 Simulation — auto_trade={auto_trade}, budget=${trade_budget:.0f}/trade, "
+              f"every {interval}s. Journal: data/journal.jsonl")
+        print("Press Ctrl+C to stop\n")
+
+        if self._notifier:
+            asyncio.create_task(self._notifier.start_polling(self._portfolio_manager, self))
+
+        while self._running:
+            cycle += 1
+            cycle_start = datetime.now()
+
+            # Analyze the watchlist plus anything we currently hold
+            symbols = list(dict.fromkeys(
+                self.settings.watchlist_symbols + self._portfolio_manager.held_symbols()
+            ))
+
+            for symbol in symbols:
+                try:
+                    signal = await self.analyze_symbol(symbol)
+                    self._journal.log_signal(signal)
+                    if auto_trade:
+                        self._maybe_trade(signal, trade_budget, buy_confidence, sell_confidence)
+                except Exception as e:
+                    logger.error(f"Error analyzing {symbol}: {e}")
+
+            # Mark to market and snapshot equity
+            self._snapshot_equity(symbols)
+
+            if cycles is not None and cycle >= cycles:
+                break
+
+            elapsed = (datetime.now() - cycle_start).total_seconds()
+            wait_time = max(0, interval - elapsed)
+            if wait_time > 0:
+                try:
+                    await asyncio.sleep(wait_time)
+                except asyncio.CancelledError:
+                    break
+
+    def _maybe_trade(self, signal: TradingSignal, trade_budget: float,
+                     buy_confidence: float, sell_confidence: float) -> None:
+        """Execute a paper trade if the signal is strong enough."""
+        symbol = signal.symbol
+        price = get_current_prices([symbol]).get(symbol)
+        if not price:
+            return
+
+        pm = self._portfolio_manager
+        held = pm.get_position(symbol)
+
+        if signal.direction == SignalDirection.BUY and signal.confidence >= buy_confidence:
+            budget = min(trade_budget, pm.portfolio.cash)
+            if budget < price * 0.001:  # not enough cash for even a sliver
+                logger.info(f"Skip BUY {symbol}: insufficient cash (${pm.portfolio.cash:.2f})")
+                return
+            qty = budget / price
+            if pm.add_position(symbol, qty, price):
+                reason = f"conf={signal.confidence:.0%}, composite={signal.composite_score:+.2f}"
+                self._journal.log_trade("BUY", symbol, qty, price, reason)
+                logger.info(f"🟢 PAPER BUY {qty:.4f} {symbol} @ ${price:.2f} ({reason})")
+
+        elif signal.direction == SignalDirection.SELL and signal.confidence >= sell_confidence:
+            if not held:
+                return  # nothing to sell; no shorting in this simulation
+            qty = held.quantity
+            if pm.remove_position(symbol, qty, price):
+                pnl = (price - held.average_entry_price) * qty
+                reason = f"conf={signal.confidence:.0%}, P&L=${pnl:+.2f}"
+                self._journal.log_trade("SELL", symbol, qty, price, reason)
+                logger.info(f"🔴 PAPER SELL {qty:.4f} {symbol} @ ${price:.2f} ({reason})")
+
+    def _snapshot_equity(self, symbols: List[str]) -> None:
+        """Mark portfolio to market, log it, and print a one-line summary."""
+        pm = self._portfolio_manager
+        held = pm.held_symbols()
+        prices = get_current_prices(held) if held else {}
+        mtm = pm.mark_to_market(prices)
+        self._journal.log_equity(
+            cash=mtm["cash"],
+            holdings_value=mtm["holdings_value"],
+            total=mtm["total"],
+            pnl=mtm["unrealized_pnl"],
+            detail=mtm["positions"],
+        )
+        print(
+            f"\n💰 Equity: ${mtm['total']:,.2f}  "
+            f"(cash ${mtm['cash']:,.2f} + holdings ${mtm['holdings_value']:,.2f})  "
+            f"P&L ${mtm['unrealized_pnl']:+,.2f}"
+        )
+        for sym, p in mtm["positions"].items():
+            print(f"   {sym}: {p['quantity']} @ ${p['entry']:.2f} → ${p['price']:.2f} "
+                  f"({p['pnl']:+.2f}, {p['pnl_pct']:+.1f}%)")
 
     def stop(self) -> None:
         """Stop the monitoring loop."""

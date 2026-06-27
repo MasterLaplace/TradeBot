@@ -540,6 +540,44 @@ Examples:
         help='Days of historical data to fetch (default: 90)'
     )
 
+    # --------------------------------------------------------------------------
+    # SIMULATE COMMAND (NEW — continuous paper-trading simulation)
+    # --------------------------------------------------------------------------
+
+    simulate_parser = subparsers.add_parser(
+        'simulate',
+        help='Run a continuous paper-trading simulation',
+        description="""
+Run the bot as a long-lived paper-trading simulation.
+
+Each cycle it analyzes your watchlist plus any held positions, optionally
+opens/closes simulated trades on strong signals, marks the portfolio to
+market, and logs everything to data/journal.jsonl for later review.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                              # auto-trade, $50/trade, watchlist from .env
+  %(prog)s --symbols SPCX AAPL NVDA     # custom universe
+  %(prog)s --no-auto-trade              # signals & equity logging only
+  %(prog)s --budget 100 --cycles 5      # $100/trade, run 5 cycles then stop
+        """
+    )
+    simulate_parser.add_argument('--symbols', nargs='+', metavar='SYM',
+                                 help='Symbols to simulate (overrides WATCHLIST)')
+    simulate_parser.add_argument('--interval', type=int, metavar='SECS',
+                                 help='Seconds between cycles (overrides .env)')
+    simulate_parser.add_argument('--budget', type=float, default=50.0, metavar='AMT',
+                                 help='Cash committed per BUY (default: 50)')
+    simulate_parser.add_argument('--buy-confidence', type=float, default=0.25,
+                                 help='Min confidence to act on BUY (default: 0.25)')
+    simulate_parser.add_argument('--sell-confidence', type=float, default=0.25,
+                                 help='Min confidence to act on SELL (default: 0.25)')
+    simulate_parser.add_argument('--no-auto-trade', action='store_true',
+                                 help='Only log signals & equity; do not trade')
+    simulate_parser.add_argument('--cycles', type=int, default=None, metavar='N',
+                                 help='Stop after N cycles (default: run forever)')
+
     return parser
 
 
@@ -584,6 +622,7 @@ def main(args: Optional[list] = None) -> int:
         'parallel': handle_parallel,
         'monitor': _handle_monitor,
         'analyze': _handle_analyze,
+        'simulate': _handle_simulate,
     }
 
     handler = handlers.get(parsed.command)
@@ -625,6 +664,29 @@ def _handle_monitor(parsed) -> int:
 
     runner = TradeBotRunner()
     asyncio.run(runner.run_monitor())
+    return 0
+
+
+def _handle_simulate(parsed) -> int:
+    """Handle the 'simulate' subcommand."""
+    import asyncio
+    from ..runner import TradeBotRunner
+    from ..config import get_settings
+
+    settings = get_settings()
+    if getattr(parsed, 'symbols', None):
+        settings.watchlist = ','.join(parsed.symbols)
+    if getattr(parsed, 'interval', None):
+        settings.analysis_interval = parsed.interval
+
+    runner = TradeBotRunner()
+    asyncio.run(runner.run_simulation(
+        auto_trade=not parsed.no_auto_trade,
+        trade_budget=parsed.budget,
+        buy_confidence=parsed.buy_confidence,
+        sell_confidence=parsed.sell_confidence,
+        cycles=parsed.cycles,
+    ))
     return 0
 
 

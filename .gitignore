@@ -94,5 +94,6 @@ models/
 
 # Personal state & analysis outputs
 data/portfolio.json
+data/journal.jsonl
 *_analysis*.txt
 output.txt

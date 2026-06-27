@@ -142,6 +142,73 @@ class PortfolioManager:
         """Get position for a specific symbol."""
         return self.portfolio.positions.get(symbol.upper())
 
+    def held_symbols(self) -> list:
+        """Return the list of currently held symbols."""
+        return list(self.portfolio.positions.keys())
+
+    def mark_to_market(self, prices: Dict[str, float]) -> dict:
+        """Value the portfolio at current prices.
+
+        Args:
+            prices: Mapping of symbol -> current price.
+
+        Returns:
+            Dict with cash, holdings_value, total, unrealized P&L, and a
+            per-position breakdown (qty, entry, price, value, pnl, pnl_pct).
+        """
+        breakdown = {}
+        holdings_value = 0.0
+        cost_basis = 0.0
+
+        for sym, pos in self.portfolio.positions.items():
+            price = prices.get(sym, pos.average_entry_price)
+            value = pos.quantity * price
+            cost = pos.quantity * pos.average_entry_price
+            pnl = value - cost
+            holdings_value += value
+            cost_basis += cost
+            breakdown[sym] = {
+                "quantity": round(pos.quantity, 6),
+                "entry": round(pos.average_entry_price, 4),
+                "price": round(price, 4),
+                "value": round(value, 2),
+                "pnl": round(pnl, 2),
+                "pnl_pct": round((pnl / cost * 100) if cost > 0 else 0.0, 2),
+            }
+
+        total = self.portfolio.cash + holdings_value
+        unrealized_pnl = holdings_value - cost_basis
+
+        return {
+            "cash": round(self.portfolio.cash, 2),
+            "holdings_value": round(holdings_value, 2),
+            "total": round(total, 2),
+            "unrealized_pnl": round(unrealized_pnl, 2),
+            "positions": breakdown,
+        }
+
+    def get_valued_summary(self, prices: Dict[str, float]) -> str:
+        """Human-readable summary including live P&L."""
+        mtm = self.mark_to_market(prices)
+        lines = [
+            "💼 *Portfolio (live)*",
+            f"💵 Cash: `${mtm['cash']:,.2f}`",
+            f"📦 Holdings: `${mtm['holdings_value']:,.2f}`",
+            f"💰 Total: `${mtm['total']:,.2f}`",
+            f"📈 Unrealized P&L: `${mtm['unrealized_pnl']:+,.2f}`",
+            "",
+        ]
+        if not mtm["positions"]:
+            lines.append("No active positions.")
+            return "\n".join(lines)
+        lines.append("*Positions:*")
+        for sym, p in mtm["positions"].items():
+            lines.append(
+                f"• {sym}: {p['quantity']} @ ${p['entry']:.2f} → ${p['price']:.2f} "
+                f"({p['pnl']:+.2f}, {p['pnl_pct']:+.1f}%)"
+            )
+        return "\n".join(lines)
+
     def get_summary(self) -> str:
         """Get a human-readable summary of the portfolio."""
         lines = [
