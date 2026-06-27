@@ -23,6 +23,10 @@ from .base import (
     BlendedRobustEnsembleStrategy,
     StrategyFactory,
 )
+from .chart_pattern_strategy import ChartPatternStrategy
+
+# Register the new strategy in the factory
+StrategyFactory.register("chart_pattern", ChartPatternStrategy)
 
 __all__ = [
     "BaseStrategy",
@@ -45,5 +49,6 @@ __all__ = [
     "AdaptiveBaselineStrategy",
     "EnsembleStrategy",
     "BlendedRobustEnsembleStrategy",
+    "ChartPatternStrategy",
     "StrategyFactory",
 ]

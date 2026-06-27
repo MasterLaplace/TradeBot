@@ -468,6 +468,78 @@ Examples:
         '--output', '-o', default='outputs/parallel_backtest_summary.csv', help='Output CSV summary path'
     )
 
+    # --------------------------------------------------------------------------
+    # MONITOR COMMAND (NEW — real-time surveillance)
+    # --------------------------------------------------------------------------
+
+    monitor_parser = subparsers.add_parser(
+        'monitor',
+        help='Start real-time market monitoring with alerts',
+        description="""
+Run continuous market surveillance on your watchlist.
+
+Analyzes each symbol using technical indicators, pattern detection,
+and news sentiment (via Ollama). Sends alerts to Telegram.
+Requires FINNHUB_API_KEY in .env file.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                              # Use watchlist from .env
+  %(prog)s --symbols AAPL MSFT NVDA     # Override watchlist
+  %(prog)s --interval 60                # Check every 60 seconds
+        """
+    )
+
+    monitor_parser.add_argument(
+        '--symbols',
+        nargs='+',
+        metavar='SYM',
+        help='Symbols to monitor (overrides WATCHLIST in .env)'
+    )
+
+    monitor_parser.add_argument(
+        '--interval',
+        type=int,
+        metavar='SECS',
+        help='Seconds between analysis cycles (overrides ANALYSIS_INTERVAL in .env)'
+    )
+
+    # --------------------------------------------------------------------------
+    # ANALYZE COMMAND (NEW — one-shot analysis)
+    # --------------------------------------------------------------------------
+
+    analyze_parser = subparsers.add_parser(
+        'analyze',
+        help='Run one-shot analysis on a ticker',
+        description="""
+Perform a complete analysis of a single ticker symbol.
+
+Runs technical indicators, pattern detection, and sentiment analysis,
+then displays the consolidated trading signal.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s AAPL
+  %(prog)s NVDA --days 180
+        """
+    )
+
+    analyze_parser.add_argument(
+        'symbol',
+        metavar='SYMBOL',
+        help='Ticker symbol to analyze (e.g. AAPL, MSFT, NVDA)'
+    )
+
+    analyze_parser.add_argument(
+        '--days',
+        type=int,
+        default=90,
+        metavar='N',
+        help='Days of historical data to fetch (default: 90)'
+    )
+
     return parser
 
 
@@ -510,6 +582,8 @@ def main(args: Optional[list] = None) -> int:
         'list': handle_list,
         'test': handle_test,
         'parallel': handle_parallel,
+        'monitor': _handle_monitor,
+        'analyze': _handle_analyze,
     }
 
     handler = handlers.get(parsed.command)
@@ -533,6 +607,57 @@ def main(args: Optional[list] = None) -> int:
 
     parser.print_help()
     return 1
+
+
+def _handle_monitor(parsed) -> int:
+    """Handle the 'monitor' subcommand."""
+    import asyncio
+    from ..runner import TradeBotRunner
+    from ..config import get_settings
+
+    settings = get_settings()
+
+    # Override settings from CLI args
+    if hasattr(parsed, 'symbols') and parsed.symbols:
+        settings.watchlist = ','.join(parsed.symbols)
+    if hasattr(parsed, 'interval') and parsed.interval:
+        settings.analysis_interval = parsed.interval
+
+    runner = TradeBotRunner()
+    asyncio.run(runner.run_monitor())
+    return 0
+
+
+def _handle_analyze(parsed) -> int:
+    """Handle the 'analyze' subcommand."""
+    import asyncio
+    from ..runner import TradeBotRunner
+
+    runner = TradeBotRunner()
+    signal = asyncio.run(runner.analyze_symbol(
+        symbol=parsed.symbol,
+        days=getattr(parsed, 'days', 90),
+    ))
+
+    # Print full signal details
+    print(f"\n{'='*50}")
+    print(f"📊 Analysis Result: {signal.symbol}")
+    print(f"{'='*50}")
+    print(f"Direction:   {signal.direction.value}")
+    print(f"Confidence:  {signal.confidence:.0%}")
+    print(f"Technical:   {signal.technical_score:+.2f}")
+    print(f"Patterns:    {signal.pattern_score:+.2f}")
+    print(f"Sentiment:   {signal.sentiment_score:+.2f}")
+    print(f"Composite:   {signal.composite_score:+.2f}")
+    if signal.patterns_detected:
+        print(f"\nPatterns detected:")
+        for p in signal.patterns_detected:
+            print(f"  • {p.pattern_name} ({p.confidence:.0%}, {p.detection_method})")
+    if signal.reasoning:
+        print(f"\nReasoning: {signal.reasoning}")
+    print(f"{'='*50}")
+
+    return 0
 
 
 if __name__ == '__main__':
