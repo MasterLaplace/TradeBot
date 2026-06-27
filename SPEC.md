@@ -196,19 +196,19 @@ quit                         # quitter proprement
 
 ## 10. Critères de « terminé »
 
-- [ ] Le repo ne contient **plus** de code crypto/Binance ; ~2000 lignes utiles.
-- [ ] `tradebot` lance une **console interactive** (sans argument) qui tourne 24/7.
-- [ ] Depuis la console : ajouter/retirer des actions, saisir des positions, lancer
+- [x] Le repo ne contient **plus** de code crypto/Binance (~3,9k lignes utiles).
+- [x] `tradebot` lance une **console interactive** (sans argument) qui tourne 24/7.
+- [x] Depuis la console : ajouter/retirer des actions, saisir des positions, lancer
       analyses/scans, voir le portefeuille et un rapport.
-- [ ] Tâches de fond : surveillance en séance, **veille hors séance** (sleep jusqu'à
+- [x] Tâches de fond : surveillance en séance, **veille hors séance** (sleep jusqu'à
       la prochaine ouverture), scan + newsletter hebdo.
-- [ ] **Notifications Discord** opérationnelles (serveur perso).
-- [ ] **Newsletter hebdomadaire** (Discord et/ou e-mail) avec résumé.
-- [ ] Le scanner alimente la surveillance/simulation (découverte d'opportunités).
-- [ ] `report` résume le journal (P&L global, trades, meilleurs/pires signaux).
-- [ ] Tests sur : agrégation des signaux, P&L du portefeuille, fallback sentiment,
-      logique heures de marché.
-- [ ] README à jour, cohérent avec cette spec.
+- [x] **Notifications Discord** opérationnelles (webhook, serveur perso).
+- [x] **Newsletter hebdomadaire** (Discord) avec résumé.
+- [x] Le scanner alimente la surveillance/simulation (découverte d'opportunités).
+- [x] `report` résume le journal (P&L réel & simulé, trades, meilleurs/pires signaux).
+- [x] Tests sur : agrégation des signaux, P&L des portefeuilles, fallback sentiment,
+      logique heures de marché, watchlist (23 tests).
+- [x] README à jour, cohérent avec cette spec.
 
 ## 11. Idées futures (pas maintenant — à discuter)
 
