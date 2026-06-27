@@ -20,6 +20,16 @@ def test_add_switch_remove(tmp_path):
     assert reg.current() == DEFAULT_USER
 
 
+def test_rename_moves_state(tmp_path):
+    reg = UserRegistry(str(tmp_path))
+    (tmp_path / "users" / slug(DEFAULT_USER) / "watchlist.json").write_text('{"symbols": ["AAPL"]}')
+    assert reg.rename(DEFAULT_USER, "MasterLaplace") is True
+    assert reg.current() == "MasterLaplace"
+    moved = tmp_path / "users" / slug("MasterLaplace") / "watchlist.json"
+    assert moved.exists()
+    assert reg.rename("MasterLaplace", "MasterLaplace") is False  # name taken
+
+
 def test_cannot_remove_last_user(tmp_path):
     reg = UserRegistry(str(tmp_path))
     assert reg.remove(DEFAULT_USER) is False

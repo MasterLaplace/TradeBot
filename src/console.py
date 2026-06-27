@@ -43,6 +43,7 @@ Commands:
   user list             list all users
   user add NAME         create a new user (own portfolios/watchlist)
   user switch NAME      switch the active user
+  user rename NAME      rename the active user (moves their data)
   user remove NAME      remove a user (keeps their files)
   start | stop          start/stop background surveillance
   quit                  exit cleanly
@@ -152,7 +153,8 @@ class Console:
         print(f"Analyzing {sym} ({days}d)...")
         signal = await self.engine.analyze_symbol(sym, days=days)
         self.engine.journal.log_signal(signal)
-        print(self.engine.format_signal(signal))
+        from .data.quotes import get_company_name
+        print(self.engine.format_signal(signal, company=get_company_name(sym)))
 
     async def _cmd_scan(self, args):
         print("Scanning market...")
@@ -224,12 +226,17 @@ class Console:
             name = " ".join(args[1:])
             print(f"👤 Switched to '{name}'." if eng.set_user(name)
                   else f"Unknown user '{name}'. Use 'user add {name}' first.")
+        elif sub == "rename" and len(args) > 1:
+            new = " ".join(args[1:])
+            old = eng.user
+            print(f"✏️  '{old}' renamed to '{new}'." if eng.rename_user(new)
+                  else f"Cannot rename to '{new}' (name already taken?).")
         elif sub == "remove" and len(args) > 1:
             name = " ".join(args[1:])
             print(f"🗑️  User '{name}' removed (files kept)." if eng.users.remove(name)
                   else f"Cannot remove '{name}' (unknown or last remaining user).")
         else:
-            print("Usage: user [list | add NAME | switch NAME | remove NAME]")
+            print("Usage: user [list | add NAME | switch NAME | rename NAME | remove NAME]")
 
     async def _cmd_users(self, args):
         """`users` lists everyone (shortcut for `user list`)."""

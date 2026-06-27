@@ -23,6 +23,30 @@ _CACHE_TTL = 60.0  # seconds
 _FX_CACHE: Dict[tuple, tuple] = {}  # (from,to) -> (rate, fetched_at)
 _FX_TTL = 3600.0  # FX moves slowly enough; refresh hourly
 
+_NAME_CACHE: Dict[str, str] = {}  # symbol -> company name (names rarely change)
+
+
+def get_company_name(symbol: str) -> str:
+    """Return the company's display name for a ticker (falls back to the ticker)."""
+    symbol = symbol.upper()
+    if symbol in _NAME_CACHE:
+        return _NAME_CACHE[symbol]
+    name = symbol
+    try:
+        import yfinance as yf
+
+        info = yf.Ticker(symbol).get_info()
+        name = info.get("longName") or info.get("shortName") or symbol
+    except Exception as e:
+        logger.debug(f"Could not fetch company name for {symbol}: {e}")
+    _NAME_CACHE[symbol] = name
+    return name
+
+
+def quote_url(symbol: str) -> str:
+    """Public quote page for a ticker (Yahoo Finance — supports US/EU/Asia)."""
+    return f"https://finance.yahoo.com/quote/{symbol.upper()}"
+
 
 def _base_currency() -> str:
     from ..config import get_settings

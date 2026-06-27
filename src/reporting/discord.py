@@ -97,12 +97,15 @@ def _footer(user: Optional[str]) -> dict:
 
 
 def build_signal_embed(signal, price: Optional[float] = None, currency: str = "€",
-                       user: Optional[str] = None) -> dict:
+                       user: Optional[str] = None, company: Optional[str] = None,
+                       url: Optional[str] = None) -> dict:
     """Build a rich Discord embed for a trading signal."""
     direction = signal.direction.value
     emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⏸️"}.get(direction, "❓")
     action = {"BUY": "ACHAT", "SELL": "VENTE", "HOLD": "CONSERVER"}.get(direction, direction)
     color = {"BUY": _COLOR_BUY, "SELL": _COLOR_SELL}.get(direction, _COLOR_HOLD)
+    # "AAPL — Apple Inc." if we know the name, else just the ticker.
+    label = f"{signal.symbol} — {company}" if company and company != signal.symbol else signal.symbol
 
     fields = [
         {"name": "🎯 Confiance", "value": f"{signal.confidence:.0%}", "inline": True},
@@ -117,12 +120,14 @@ def build_signal_embed(signal, price: Optional[float] = None, currency: str = "�
     ]
 
     embed = {
-        "title": f"{emoji} Signal {action} — {signal.symbol}",
+        "title": f"{emoji} Signal {action} — {label}",
         "color": color,
         "fields": fields,
         "footer": _footer(user),
         "timestamp": datetime.now().astimezone().isoformat(),
     }
+    if url:
+        embed["url"] = url  # makes the title a clickable link
     if signal.reasoning:
         embed["description"] = signal.reasoning[:4000]
     return embed

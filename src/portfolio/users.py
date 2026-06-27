@@ -118,6 +118,25 @@ class UserRegistry:
         self._save()
         return True
 
+    def rename(self, old: str, new: str) -> bool:
+        """Rename a user, moving their state directory. False on conflict."""
+        new = new.strip()
+        if old not in self._users or not new or new in self._users:
+            return False
+        old_dir = self.users_root / slug(old)
+        new_dir = self.users_root / slug(new)
+        try:
+            if old_dir.exists() and not new_dir.exists():
+                shutil.move(str(old_dir), str(new_dir))
+        except Exception as e:
+            logger.error(f"Could not move state for rename {old}->{new}: {e}")
+            return False
+        self._users = [new if u == old else u for u in self._users]
+        if self._current == old:
+            self._current = new
+        self._save()
+        return True
+
     def remove(self, name: str) -> bool:
         """Remove a user from the registry (keeps their files on disk)."""
         if name not in self._users or len(self._users) == 1:

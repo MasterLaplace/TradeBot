@@ -86,6 +86,14 @@ class TradeBotEngine:
         self._load_user_state()
         return True
 
+    def rename_user(self, new_name: str) -> bool:
+        """Rename the active user (and move their state). False on conflict."""
+        if not self.users.rename(self.user, new_name):
+            return False
+        self.user = self.users.current()
+        self._load_user_state()
+        return True
+
     # ====================================================================
     # ANALYSIS
     # ====================================================================
@@ -224,11 +232,12 @@ class TradeBotEngine:
     # Helpers
     # ====================================================================
     @staticmethod
-    def format_signal(signal: TradingSignal) -> str:
+    def format_signal(signal: TradingSignal, company: Optional[str] = None) -> str:
         emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "⏸️"}
         e = emoji.get(signal.direction.value, "❓")
+        label = f"{signal.symbol} — {company}" if company and company != signal.symbol else signal.symbol
         lines = [
-            f"{e} {signal.symbol}: {signal.direction.value} "
+            f"{e} {label}: {signal.direction.value} "
             f"(confidence {signal.confidence:.0%}, composite {signal.composite_score:+.2f})",
             f"   tech={signal.technical_score:+.2f}  "
             f"pattern={signal.pattern_score:+.2f}  sentiment={signal.sentiment_score:+.2f}",
@@ -262,9 +271,12 @@ class TradeBotEngine:
         try:
             if hasattr(self.notifier, "send_embed"):
                 from .reporting.discord import build_signal_embed
+                from .data.quotes import get_company_name, quote_url
                 price = self.live_prices([signal.symbol]).get(signal.symbol)
                 embed = build_signal_embed(
-                    signal, price, self.settings.currency_symbol, user=self.user
+                    signal, price, self.settings.currency_symbol, user=self.user,
+                    company=get_company_name(signal.symbol),
+                    url=quote_url(signal.symbol),
                 )
                 await self.notifier.send_embed(embed)
             else:
