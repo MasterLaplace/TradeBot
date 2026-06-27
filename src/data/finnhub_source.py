@@ -1,243 +1,123 @@
 """
-Finnhub Data Source Module.
+Historical Candle Source.
 
-Provides market data from Finnhub API (free tier: 30 req/s).
-Supports both REST historical candles and WebSocket real-time prices.
+Fetches historical daily candles for a single stock symbol.
 
-Finnhub covers US and European equities, ETFs, and crypto.
+Primary source is **yfinance** (free, no account, no ID — SPEC.md §7).
+If a Finnhub API key is configured it is tried first, with automatic
+fallback to yfinance on any failure. Either way the caller gets a clean
+list of `Candle` objects.
 
 Usage:
-    source = FinnhubRESTSource(symbol="AAPL", api_key="...", resolution="D", days=90)
-    prices = source.fetch_prices()
+    source = HistoricalSource(symbol="AAPL", days=90)
+    candles = source.fetch()
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
-import time
 
 import requests
 
-from ..core.models import Price
-from .sources import BaseDataSource
+from ..core.models import Candle
+
+logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# FINNHUB REST DATA SOURCE
-# =============================================================================
+class HistoricalSource:
+    """Fetch historical daily candles for one symbol (yfinance / Finnhub)."""
 
-class FinnhubRESTSource(BaseDataSource):
-    """
-    Fetch historical candle data from Finnhub REST API.
-
-    Free tier limits: 30 API calls/second.
-    Resolutions: 1, 5, 15, 30, 60, D, W, M
-    """
-
-    BASE_URL = "https://finnhub.io/api/v1"
-
-    RESOLUTION_MAP = {
-        "1m": "1",
-        "5m": "5",
-        "15m": "15",
-        "30m": "30",
-        "1h": "60",
-        "1d": "D",
-        "1w": "W",
-        "1M": "M",
-    }
+    FINNHUB_URL = "https://finnhub.io/api/v1/stock/candle"
 
     def __init__(
         self,
         symbol: str,
-        api_key: str,
+        api_key: str = "",
         resolution: str = "D",
         days: int = 90,
-        symbol_b: Optional[str] = None,
     ):
         """
         Args:
-            symbol: Primary ticker symbol (e.g. "AAPL", "TSLA").
-            api_key: Finnhub API key.
-            resolution: Candle resolution (1, 5, 15, 30, 60, D, W, M).
-            days: Number of days of history to fetch.
-            symbol_b: Optional second symbol for pair trading (legacy compat).
+            symbol: Ticker symbol (e.g. "AAPL").
+            api_key: Optional Finnhub API key. If empty, yfinance is used directly.
+            resolution: Candle resolution (D, W, M).
+            days: Days of history to fetch.
         """
         self.symbol = symbol.upper()
-        self.symbol_b = symbol_b.upper() if symbol_b else None
         self.api_key = api_key
-        self.resolution = self.RESOLUTION_MAP.get(resolution, resolution)
+        self.resolution = resolution
         self.days = days
-        self._prices: Optional[List[Price]] = None
+        self._candles: Optional[List[Candle]] = None
 
-    def _fetch_candles(self, symbol: str) -> dict:
-        """Fetch candle data from Finnhub for a single symbol.
+    def fetch(self) -> List[Candle]:
+        """Return historical candles (cached after first call)."""
+        if self._candles is not None:
+            return self._candles
 
-        Returns the raw JSON response containing 'c' (close), 'h' (high),
-        'l' (low), 'o' (open), 'v' (volume), 't' (timestamps), and 's' (status).
-        """
+        candles: List[Candle] = []
+        if self.api_key:
+            try:
+                candles = self._fetch_finnhub()
+            except Exception as e:
+                logger.warning(
+                    f"Finnhub failed for {self.symbol} ({e}). Falling back to yfinance."
+                )
+                candles = []
+
+        if not candles:
+            candles = self._fetch_yfinance()
+
+        self._candles = candles
+        return candles
+
+    # ------------------------------------------------------------------ Finnhub
+    def _fetch_finnhub(self) -> List[Candle]:
         now = int(datetime.now().timestamp())
         start = int((datetime.now() - timedelta(days=self.days)).timestamp())
-
         params = {
-            "symbol": symbol,
+            "symbol": self.symbol,
             "resolution": self.resolution,
             "from": start,
             "to": now,
             "token": self.api_key,
         }
+        response = requests.get(self.FINNHUB_URL, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("s") != "ok":
+            raise ValueError(f"Finnhub returned status={data.get('s')} for {self.symbol}")
 
-        try:
-            response = requests.get(
-                f"{self.BASE_URL}/stock/candle",
-                params=params,
-                timeout=30,
+        return [
+            Candle(
+                close=float(c),
+                open=float(o),
+                high=float(h),
+                low=float(low),
+                volume=float(v),
+                timestamp=datetime.fromtimestamp(ts),
             )
-            response.raise_for_status()
-            data = response.json()
-
-            if data.get("s") == "no_data":
-                raise ValueError(
-                    f"No data from Finnhub for {symbol} "
-                    f"(resolution={self.resolution}, days={self.days})"
-                )
-
-            return data
-
-        except (requests.RequestException, ValueError) as e:
-            # Fallback to Yahoo Finance if Finnhub fails (e.g., 401/403 for candles)
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Finnhub failed ({e}). Falling back to yfinance for {symbol}...")
-            
-            try:
-                import yfinance as yf
-                import pandas as pd
-                
-                # Map resolution
-                yf_res_map = {"D": "1d", "W": "1wk", "M": "1mo"}
-                yf_res = yf_res_map.get(self.resolution, "1d")
-                
-                ticker = yf.Ticker(symbol)
-                df = ticker.history(period=f"{self.days}d", interval=yf_res)
-                
-                if df.empty:
-                    raise ValueError(f"yfinance returned empty data for {symbol}")
-                    
-                # Convert yfinance dataframe to finnhub format
-                return {
-                    "c": df["Close"].tolist(),
-                    "h": df["High"].tolist(),
-                    "l": df["Low"].tolist(),
-                    "o": df["Open"].tolist(),
-                    "v": df["Volume"].tolist(),
-                    "t": [int(ts.timestamp()) for ts in df.index],
-                    "s": "ok"
-                }
-            except Exception as yf_e:
-                raise ConnectionError(f"Both Finnhub and yfinance failed: Finnhub({e}), yfinance({yf_e})") from yf_e
-
-    def fetch_prices(self) -> List[Price]:
-        """Fetch historical prices.
-
-        If symbol_b is set, aligns both series by timestamp and returns
-        Price objects with both asset values (legacy pair-trading compat).
-        Otherwise, asset_a = close price and asset_b = 0.
-        """
-        if self._prices is not None:
-            return self._prices
-
-        data_a = self._fetch_candles(self.symbol)
-
-        if self.symbol_b:
-            time.sleep(0.05)  # Respect rate limit
-            data_b = self._fetch_candles(self.symbol_b)
-
-            # Align by timestamps
-            timestamps_a = set(data_a["t"])
-            timestamps_b = set(data_b["t"])
-            common_ts = sorted(timestamps_a & timestamps_b)
-
-            idx_a = {t: i for i, t in enumerate(data_a["t"])}
-            idx_b = {t: i for i, t in enumerate(data_b["t"])}
-
-            self._prices = [
-                Price(
-                    asset_a=float(data_a["c"][idx_a[ts]]),
-                    asset_b=float(data_b["c"][idx_b[ts]]),
-                    timestamp=datetime.fromtimestamp(ts),
-                )
-                for ts in common_ts
-            ]
-        else:
-            self._prices = [
-                Price(
-                    asset_a=float(close),
-                    asset_b=0.0,
-                    timestamp=datetime.fromtimestamp(ts),
-                )
-                for close, ts in zip(data_a["c"], data_a["t"])
-            ]
-
-        return self._prices
-
-    def get_current_price(self) -> Price:
-        """Get real-time quote from Finnhub."""
-        try:
-            response = requests.get(
-                f"{self.BASE_URL}/quote",
-                params={"symbol": self.symbol, "token": self.api_key},
-                timeout=10,
+            for c, o, h, low, v, ts in zip(
+                data["c"], data["o"], data["h"], data["l"], data["v"], data["t"]
             )
-            response.raise_for_status()
-            data = response.json()
+        ]
 
-            price_a = float(data.get("c", 0))  # Current price
+    # ----------------------------------------------------------------- yfinance
+    def _fetch_yfinance(self) -> List[Candle]:
+        import yfinance as yf
 
-            price_b = 0.0
-            if self.symbol_b:
-                time.sleep(0.05)
-                resp_b = requests.get(
-                    f"{self.BASE_URL}/quote",
-                    params={"symbol": self.symbol_b, "token": self.api_key},
-                    timeout=10,
-                )
-                resp_b.raise_for_status()
-                price_b = float(resp_b.json().get("c", 0))
+        yf_res = {"D": "1d", "W": "1wk", "M": "1mo"}.get(self.resolution, "1d")
+        df = yf.Ticker(self.symbol).history(period=f"{self.days}d", interval=yf_res)
+        if df.empty:
+            raise ConnectionError(f"yfinance returned no data for {self.symbol}")
 
-            return Price(
-                asset_a=price_a,
-                asset_b=price_b,
-                timestamp=datetime.now(),
+        return [
+            Candle(
+                close=float(row["Close"]),
+                open=float(row["Open"]),
+                high=float(row["High"]),
+                low=float(row["Low"]),
+                volume=float(row["Volume"]),
+                timestamp=ts.to_pydatetime(),
             )
-
-        except requests.RequestException as e:
-            raise ConnectionError(f"Failed to get current price from Finnhub: {e}") from e
-
-    def get_company_profile(self, symbol: Optional[str] = None) -> dict:
-        """Fetch company profile data from Finnhub."""
-        sym = symbol or self.symbol
-        try:
-            response = requests.get(
-                f"{self.BASE_URL}/stock/profile2",
-                params={"symbol": sym, "token": self.api_key},
-                timeout=10,
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            raise ConnectionError(f"Failed to fetch company profile: {e}") from e
-
-    def save_to_csv(self, output_path: str) -> None:
-        """Save fetched prices to CSV for offline backtesting."""
-        import pandas as pd
-
-        prices = self.fetch_prices()
-        data = {
-            "epoch": range(len(prices)),
-            "Asset A": [p.asset_a for p in prices],
-            "Asset B": [p.asset_b for p in prices],
-            "timestamp": [p.timestamp.isoformat() if p.timestamp else "" for p in prices],
-        }
-        df = pd.DataFrame(data)
-        df.set_index("epoch", inplace=True)
-        df.to_csv(output_path)
+            for ts, row in df.iterrows()
+        ]

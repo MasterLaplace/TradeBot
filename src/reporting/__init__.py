@@ -1,5 +1,5 @@
-"""Reporting module - Reports and visualizations."""
+"""Reporting module - Notifications and summaries."""
 
-from .reports import ReportGenerator, ChartGenerator
+from .telegram_bot import TelegramNotifier
 
-__all__ = ["ReportGenerator", "ChartGenerator"]
+__all__ = ["TelegramNotifier"]

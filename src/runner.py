@@ -28,7 +28,7 @@ import pandas as pd
 
 from .config import get_settings
 from .core.models import TradingSignal, SignalDirection
-from .data.finnhub_source import FinnhubRESTSource
+from .data.finnhub_source import HistoricalSource
 from .data.news_fetcher import NewsFetcher
 from .analysis.technical import AdvancedTechnicalAnalyzer
 from .analysis.pattern_detector import PatternDetector
@@ -96,13 +96,13 @@ class TradeBotRunner:
 
         # 1. Fetch price data (Finnhub if a key is set, otherwise yfinance fallback)
         try:
-            source = FinnhubRESTSource(
+            source = HistoricalSource(
                 symbol=symbol,
                 api_key=self.settings.finnhub_api_key,
                 resolution="D",
                 days=days,
             )
-            prices = source.fetch_prices()
+            prices = source.fetch()
         except Exception as e:
             logger.error(f"Failed to fetch price data for {symbol}: {e}")
             return self._empty_signal(symbol)
@@ -113,7 +113,7 @@ class TradeBotRunner:
 
         # Build DataFrame
         df = pd.DataFrame({
-            "close": [p.asset_a for p in prices],
+            "close": [p.close for p in prices],
             "timestamp": [p.timestamp for p in prices],
         })
 
@@ -386,7 +386,7 @@ class TradeBotRunner:
             return
 
         lines = ["*Market Scan Results* 🔍\n"]
-        
+
         anomalies = results.get("anomalies", [])
         if anomalies:
             lines.append("*Top Volatility Anomalies:*")

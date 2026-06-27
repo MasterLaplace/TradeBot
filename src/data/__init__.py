@@ -1,15 +1,10 @@
-"""Data module - Data sources and loaders."""
+"""Data module - Market data sources."""
 
-from .sources import (
-    BaseDataSource,
-    CSVDataSource,
-    BinanceRESTSource,
-    DataSourceFactory,
-)
+from .finnhub_source import HistoricalSource
+from .quotes import get_current_price, get_current_prices
 
 __all__ = [
-    "BaseDataSource",
-    "CSVDataSource",
-    "BinanceRESTSource",
-    "DataSourceFactory",
+    "HistoricalSource",
+    "get_current_price",
+    "get_current_prices",
 ]

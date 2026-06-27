@@ -1,37 +1,29 @@
-"""Core module - Domain models and interfaces."""
+"""Core module - Domain models."""
 
 from .models import (
-    Price,
-    Allocation,
+    Candle,
+    Position,
     Portfolio,
-    BacktestResult,
-    Strategy,
-    DataSource,
-    Reporter,
-    StrategyType,
-    DataSourceType,
-    Command,
     SignalDirection,
     NewsArticle,
     SentimentReport,
     ChartPattern,
     TradingSignal,
+    SIGNAL_WEIGHTS,
+    BUY_THRESHOLD,
+    SELL_THRESHOLD,
 )
 
 __all__ = [
-    "Price",
-    "Allocation",
+    "Candle",
+    "Position",
     "Portfolio",
-    "BacktestResult",
-    "Strategy",
-    "DataSource",
-    "Reporter",
-    "StrategyType",
-    "DataSourceType",
-    "Command",
     "SignalDirection",
     "NewsArticle",
     "SentimentReport",
     "ChartPattern",
     "TradingSignal",
+    "SIGNAL_WEIGHTS",
+    "BUY_THRESHOLD",
+    "SELL_THRESHOLD",
 ]
