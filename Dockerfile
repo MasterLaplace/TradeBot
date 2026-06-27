@@ -24,9 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # --------------------------------------------
 FROM base AS builder
 
-COPY requirement.txt /app/requirement.txt
+COPY pyproject.toml /app/pyproject.toml
+COPY src/ /app/src/
 RUN python -m pip install --upgrade pip
-RUN pip install --user -r /app/requirement.txt
+RUN pip install --user -e "/app"
 
 # --------------------------------------------
 # Production: copy app and installed libs
@@ -42,7 +43,8 @@ COPY tradebot.py /app/tradebot.py
 COPY src/ /app/src/
 COPY data/ /app/data/
 COPY reports/ /app/reports/
-COPY requirement.txt /app/requirement.txt
+COPY pyproject.toml /app/pyproject.toml
+COPY .env.example /app/.env.example
 
 # Create outputs dir
 RUN mkdir -p /app/outputs

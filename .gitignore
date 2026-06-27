@@ -85,3 +85,14 @@ tmp_venv/
 
 # PNG images (generated plots)
 *.png
+
+# AI Models & Weights
+models/
+*.pt
+*.onnx
+*.safetensors
+
+# Personal state & analysis outputs
+data/portfolio.json
+*_analysis*.txt
+output.txt

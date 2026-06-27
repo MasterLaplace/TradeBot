@@ -1,3 +1,57 @@
+[project]
+name = "tradebot"
+version = "3.0.0"
+description = "Quantitative trading suite — analysis, pattern detection, AI sentiment, and notifications"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.14"
+authors = [
+    { name = "MasterLaplace" },
+]
+
+dependencies = [
+    # Core
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "matplotlib>=3.7.0",
+    "requests>=2.31.0",
+    "tqdm>=4.0.0",
+    "websockets>=11.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    # Trading & API
+    "ccxt>=4.0.0",
+    "finnhub-python>=2.4.0",
+    "yfinance>=0.2.30",
+    # Async
+    "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+analysis = [
+    "pandas-ta>=0.3.14b",
+    "mplfinance>=0.12.0",
+    "ultralytics>=8.1.0",
+    "scipy>=1.10.0",
+    "ollama>=0.4.0",
+]
+notifications = [
+    "aiohttp>=3.9.0",
+]
+dev = [
+    "pre-commit>=3.3.0",
+    "black>=24.3.0",
+    "ruff>=0.14.8,<0.15.0",
+    "pytest>=7.0.0",
+]
+all = [
+    "tradebot[analysis,notifications,dev]",
+]
+
+[project.scripts]
+tradebot = "src.cli:main"
+
 [tool.black]
 line-length = 88
 py38 = false
@@ -8,3 +62,14 @@ select = ["E", "F", "C", "N", "B"]
 
 [tool.isort]
 profile = "black"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

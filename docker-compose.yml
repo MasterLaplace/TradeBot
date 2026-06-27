@@ -91,7 +91,49 @@ services:
     volumes:
       - ./tests:/app/tests:ro
 
+  # ----------------------------------------
+  # Ollama - Local AI Server
+  # ----------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: trading-bot-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ----------------------------------------
+  # Monitor - Continuous market surveillance
+  # ----------------------------------------
+  monitor:
+    build:
+      context: .
+      target: production
+    container_name: trading-bot-monitor
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - ./data:/app/data:ro
+      - ./outputs:/app/outputs
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    command: >
+      python tradebot.py monitor
+
 # Named volumes for persistence
 volumes:
   outputs:
   experiments:
+  ollama_data:
